@@ -3,7 +3,7 @@ name: Build ponwrt firmware
 on:
   workflow_dispatch:
     inputs:
-      target:
+      soc:
         description: 'SoC 目标'
         required: true
         default: 'an7581'
@@ -11,8 +11,8 @@ on:
         options:
           - an7581
           - an7583
-      device:
-        description: '设备 profile（对应 configs/<target>.config 里的 CONFIG_TARGET_DEVICE_*）'
+      device_profile:
+        description: '设备 profile（对应 configs/<soc>.config 里的 CONFIG_TARGET_DEVICE_*）'
         required: true
         default: 'nokia_xg-040g-md-ubi'
         type: string
@@ -41,7 +41,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-${{ inputs.target }}-${{ inputs.device }}
+  group: build-${{ inputs.soc }}-${{ inputs.device_profile }}
   cancel-in-progress: false
 
 jobs:
@@ -64,19 +64,19 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/ponwrt/dl
-          key: dl-${{ inputs.target }}-${{ inputs.pin_commit }}-${{ hashFiles('build-ponwrt.sh') }}
+          key: dl-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('build-ponwrt.sh') }}
           restore-keys: |
-            dl-${{ inputs.target }}-${{ inputs.pin_commit }}-
-            dl-${{ inputs.target }}-
+            dl-${{ inputs.soc }}-${{ inputs.pin_commit }}-
+            dl-${{ inputs.soc }}-
 
       - name: 编译
         env:
-          TARGET: ${{ inputs.target }}
-          DEVICE: ${{ inputs.device }}
-          PIN_COMMIT: ${{ inputs.pin_commit }}
-          JOBS: ${{ inputs.jobs }}
+          PONWRT_SOC: ${{ inputs.soc }}
+          PONWRT_DEVICE: ${{ inputs.device_profile }}
+          PONWRT_PIN: ${{ inputs.pin_commit }}
+          PONWRT_JOBS: ${{ inputs.jobs }}
+          PONWRT_SMOKE: ${{ inputs.smoke_only && '1' || '0' }}
           FORCE: '1'
-          SMOKE: ${{ inputs.smoke_only && '1' || '0' }}
         run: |
           chmod +x build-ponwrt.sh
           ./build-ponwrt.sh
@@ -93,7 +93,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ponwrt-${{ inputs.device }}-${{ inputs.target }}
+          name: ponwrt-${{ inputs.device_profile }}-${{ inputs.soc }}
           path: artifact/*
           retention-days: 30
           if-no-files-found: warn
@@ -102,10 +102,9 @@ jobs:
         if: ${{ inputs.make_release && success() }}
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.device }}-$(date +%Y%m%d-%H%M)
         run: |
-          TAG="${{ inputs.device }}-$(date +%Y%m%d-%H%M)"
+          TAG="${{ inputs.device_profile }}-$(date +%Y%m%d-%H%M)"
           gh release create "$TAG" artifact/*.itb artifact/sha256sums artifact/ponwrt-version \
-            --title "${{ inputs.device }} $TAG" \
+            --title "${{ inputs.device_profile }} $TAG" \
             --notes "自动构建：ponwrt @ ${{ inputs.pin_commit }}" \
             --prerelease || true
