@@ -1,0 +1,104 @@
+name: Build ponwrt firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'SoC 目标'
+        required: true
+        default: 'an7581'
+        type: choice
+        options:
+          - an7581
+          - an7583
+      device:
+        description: '设备 profile（对应 configs/<target>.config 里的 CONFIG_TARGET_DEVICE_*）'
+        required: true
+        default: 'nokia_xg-040g-md-ubi'
+        type: string
+      pin_commit:
+        description: 'ponwrt 提交'
+        required: false
+        default: '03c134544714617e196dd399c85ebb90fb6eefa1'
+        type: string
+      jobs:
+        description: 'make -j（runner 4 核，建议 4）'
+        required: false
+        default: '4'
+        type: string
+      make_release:
+        description: '构建成功后发布到 Release'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ inputs.target }}-${{ inputs.device }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+
+    steps:
+      - name: 取出仓库（workflow + 构建脚本）
+        uses: actions/checkout@v4
+
+      - name: 释放磁盘空间
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo apt-get clean
+          df -h /
+
+      - name: 缓存源码包 dl/
+        uses: actions/cache@v4
+        with:
+          path: ~/ponwrt/dl
+          key: dl-${{ inputs.target }}-${{ inputs.pin_commit }}-${{ hashFiles('build-ponwrt.sh') }}
+          restore-keys: |
+            dl-${{ inputs.target }}-${{ inputs.pin_commit }}-
+            dl-${{ inputs.target }}-
+
+      - name: 编译
+        env:
+          TARGET: ${{ inputs.target }}
+          DEVICE: ${{ inputs.device }}
+          PIN_COMMIT: ${{ inputs.pin_commit }}
+          JOBS: ${{ inputs.jobs }}
+          FORCE: '1'
+        run: |
+          chmod +x build-ponwrt.sh
+          ./build-ponwrt.sh
+
+      - name: 收集产物
+        if: always()
+        run: |
+          mkdir -p artifact
+          cp out/* artifact/ 2>/dev/null || true
+          cp "$HOME"/ponwrt-build-*.log artifact/ 2>/dev/null || true
+          ls -lh artifact/ || true
+
+      - name: 上传 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ponwrt-${{ inputs.device }}-${{ inputs.target }}
+          path: artifact/*
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: 发布 Release
+        if: ${{ inputs.make_release && success() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.device }}-$(date +%Y%m%d-%H%M)
+        run: |
+          TAG="${{ inputs.device }}-$(date +%Y%m%d-%H%M)"
+          gh release create "$TAG" artifact/*.itb artifact/sha256sums artifact/ponwrt-version \
+            --title "${{ inputs.device }} $TAG" \
+            --notes "自动构建：ponwrt @ ${{ inputs.pin_commit }}" \
+            --prerelease || true
