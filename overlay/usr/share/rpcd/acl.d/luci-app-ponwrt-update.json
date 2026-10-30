@@ -1,0 +1,12 @@
+{
+	"luci-app-ponwrt-update": {
+		"description": "ponwrt firmware update check (GitHub releases)",
+		"read": {
+			"file": {
+				"/usr/bin/ponwrt-update-check": [ "exec" ],
+				"/etc/ponwrt-version": [ "read" ]
+			}
+		},
+		"write": {}
+	}
+}
