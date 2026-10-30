@@ -12,6 +12,7 @@
 
 REPO="Snowail/PonWrt-Firmware-with-Autoupdater"
 BASE="https://github.com/${REPO}/releases/latest/download"
+RAW="https://raw.githubusercontent.com/${REPO}/main/version.json"
 TMPJ="/tmp/ponwrt-update.json"
 TMPF="/tmp/ponwrt-update.itb"
 LOCAL="/etc/ponwrt-version"
@@ -41,7 +42,9 @@ cur_device="$(sed -n 's/^device=//p' "$LOCAL" 2>/dev/null)"
 
 latest=""; lcommit=""; lbuilt=""; lfile=""; lsha=""; lnotes=""; err=""
 
-if fetch "$BASE/version.json?t=$(date +%s)" "$TMPJ" || fetch "$BASE/version.json" "$TMPJ"; then
+# 优先取仓库里的 version.json（raw 的缓存很短），再退回 Release 资产
+if fetch "$RAW?t=$(date +%s)" "$TMPJ" || fetch "$RAW" "$TMPJ" || \
+   fetch "$BASE/version.json?t=$(date +%s)" "$TMPJ" || fetch "$BASE/version.json" "$TMPJ"; then
     latest="$(jsonfilter -i "$TMPJ" -e '@.version' 2>/dev/null)"
     lcommit="$(jsonfilter -i "$TMPJ" -e '@.commit' 2>/dev/null)"
     lbuilt="$(jsonfilter -i "$TMPJ" -e '@.built' 2>/dev/null)"
