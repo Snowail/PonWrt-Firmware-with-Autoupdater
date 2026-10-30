@@ -83,29 +83,69 @@ docker exec -it ponwrt bash -c 'bash /build/build-ponwrt.sh'
 
 ## 五、刷机
 
+> **刷本固件之前，先完成三件事**（缺一不可）：
+>
+> 1. 按 [Loong1996 网页 U-Boot 指南](https://loong1996.github.io/ImmortalWrt-Airoha/recovery-guide.html) 给机器刷好 **网页 U-Boot**；
+> 2. 在恢复页做一次**整片闪存备份**（`all_flash.bin`）；
+> 3. 从备份里**提取 `bosa` 与 `ri` 两个分区**：`bosa` 是光模块校准数据，`ri` 是出厂 MAC / 序列号。
+>    这两个分区**每台机器唯一**，丢了无法还原原厂状态，PON 也可能无法注册。
+>    日常刷机不会动它们（只写 `fit` 卷），但**首次迁移/重建 UBI 前必须先备份**。
+
 1. **先试跑**：U-Boot 恢复页 →「试跑固件」，上传 `*-initramfs-recovery.itb`（不写闪存，起不来断电即可）
 2. **正式刷**：恢复页 →「日常刷机」，上传 `*-squashfs-sysupgrade.itb`
    - 只写 `fit` 卷，`bosa`（光模块校准）与 `ri`（出厂 MAC）**不会**被清掉
    - **不要勾「重建 UBI」**，除非你确实要清空整片闪存
-3. **首次开机**后按你的线路参数配置：
-   - LuCI（`http://10.0.0.1`）→ 网络 → PON：填 **XGPON 模式、光模块 SN、LOID/注册号**
-   - 网络 → 接口 → WAN：`pon0.81` 上做 **PPPoE 拨号**
-   - 系统 → 管理权：设置 root 密码
-   - 如果之前用 `sysupgrade -b` 备份过：**系统 → 备份/升级 → 上传归档** 一次性恢复
+3. 首次开机后按下一节配置 PON 与 PPPoE。
 
-## 六、升级
+## 六、首次配置（PON / PPPoE）
+
+### 1. PON 注册
+
+LuCI（`http://10.0.0.1`）→ 网络 → PON：
+
+- 模式：`XGPON`
+- 光模块 SN：原厂光猫的 SN
+- 认证方式按运营商来：
+  - **LOID 认证**：填 LOID 与 LOID 密码
+  - **部分移动省份**：SN + Password
+- 同时在 **系统 → 管理权** 里设置 root 密码
+
+配置正确后 PON 状态应为 **O5 并常驻**（截图为拔掉光纤时的状态，属正常）。
+相关讨论见 [right.com.cn 原帖](https://www.right.com.cn/forum/forum.php?mod=viewthread&tid=8486486)。
+
+### 2. PPPoE 拨号
+
+**WAN 接口的设备默认是 `pon0`。** 如果线路是 VLAN 拨号，设备名要改成 `pon0.<你的 VLAN>`：
+
+1. 先在**原厂光猫**里记下 PPPoE 的 **VLAN ID**（不同运营商、不同地区都不一样）；
+2. LuCI → 网络 → 接口 → `wan` → **设备**：把 `pon0` 改成 `pon0.<你的 VLAN>`；
+3. **协议**选 `PPPoE`，填宽带账号与密码，保存并应用。
+
+> 本仓库配置里出现的 `pon0.81` 中，**`81` 只是示例**（某地移动的 VLAN ID），
+> 你的数值请以原厂光猫为准。
+
+### 3. 桥接模式（可选）
+
+想把 2.5G 的 `lan1` 直接透传给下游路由器：
+
+1. 网络 → 接口 → 设备 → `br-lan`：把 `lan1` **解绑**；
+2. 新建一个网桥，把 `pon0` 和 `lan1` 加进去；
+3. 接口页面给这个网桥建一个**无协议（Unmanaged）**接口，并把它拉起来；
+4. 下游路由器接 `lan1` 拨号即可，**所有 VLAN 都会透传**。
+
+## 七、升级
 
 - 日常升级用 LuCI「系统 → 备份/升级 → 刷写新固件」，或 `sysupgrade -n <itb>`
 - `sysupgrade` 会保留 `/etc/config`（PON、PPPoE、静态租约、ZeroTier 身份等）
 - 镜像里的 `uci-defaults` 只设置主题/语言/LAN 网段，不涉及 PON 与 PPPoE
 
-## 七、路线图
+## 八、路线图
 
 - [ ] 固件内「系统 → 固件更新」页面：定时检查本仓库 Release，登录 LuCI 后提示新版本
 - [ ] Release 自动附带 `version.json` 与 `sha256sums`，支持一键校验下载
 - [ ] 多机型矩阵构建（一次触发编多个 profile）
 
-## 八、致谢与许可
+## 九、致谢与许可
 
 - PON 驱动与固件基础：[pbs05/ponwrt](https://github.com/pbs05/ponwrt)
 - Web U-Boot 与刷机方案：[Loong1996/ImmortalWrt-Airoha](https://github.com/Loong1996/ImmortalWrt-Airoha)
