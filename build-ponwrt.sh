@@ -34,6 +34,9 @@ AURORA_FEED="${AURORA_FEED:-https://github.com/eamonxg/luci-theme-aurora.git}"
 DATE_TAG="$(date +%Y%m%d-%H%M%S)"
 LOG="$HOME/ponwrt-build-$DATE_TAG.log"
 
+# 必须在 cd 之前算出脚本所在仓库的绝对路径（后面要取 overlay/ 和 tools/）
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # 容器/root 下编译时，GNU tar 等 configure 会拒绝运行
 export FORCE_UNSAFE_CONFIGURE=1
 
@@ -114,7 +117,6 @@ if [ ! -f package/luci-theme-aurora/Makefile ]; then
 fi
 
 say "[3d/7] 注入 overlay（更新检查脚本 + ACL）并给备份/升级页打补丁"
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p files
 [ -d "$REPO_DIR/overlay" ] && cp -a "$REPO_DIR/overlay/." files/
 chmod +x files/usr/bin/ponwrt-update-check 2>/dev/null || true
