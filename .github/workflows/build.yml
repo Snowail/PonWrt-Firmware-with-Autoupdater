@@ -84,6 +84,7 @@ jobs:
           ls -lh artifact/ || true
 
       - name: 上传 Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ponwrt-${{ inputs.device }}-${{ inputs.target }}
