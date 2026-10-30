@@ -121,6 +121,9 @@ chmod +x files/usr/bin/ponwrt-update-check 2>/dev/null || true
 FLASH_JS="feeds/luci/modules/luci-mod-system/htdocs/luci-static/resources/view/system/flash.js"
 if [ -f "$FLASH_JS" ]; then
   python3 "$REPO_DIR/tools/patch-flash.py" "$FLASH_JS"
+  if command -v node >/dev/null 2>&1; then
+    node --check "$FLASH_JS" && echo "  OK   flash.js 语法检查通过"
+  fi
 else
   echo "  !! 未找到 $FLASH_JS，跳过补丁"
 fi
