@@ -89,6 +89,41 @@ jobs:
           mkdir -p artifact
           # 构建脚本把产物写到 $HOME/out（不是仓库目录下的 out/）
           cp "$HOME"/out/* artifact/ 2>/dev/null || true
+          # 生成 version.json：固件内的更新检查靠它判断版本
+          python3 - <<'PY'
+          import json, os, re
+          out = os.path.expanduser('~/out')
+          ver = {}
+          p = os.path.join(out, 'ponwrt-version')
+          if os.path.exists(p):
+              for line in open(p):
+                  k, _, v = line.strip().partition('=')
+                  if k:
+                      ver[k] = v
+          sha, itb = '', ''
+          sp = os.path.join(out, 'sha256sums')
+          if os.path.exists(sp):
+              for line in open(sp):
+                  m = re.match(r'([0-9a-f]{64})\s+\*?(.+\.itb)', line.strip())
+                  if m and 'sysupgrade' in m.group(2):
+                      sha, itb = m.group(1), m.group(2)
+          if itb:
+              data = {
+                  'version': "%s-%s" % (ver.get('device', 'unknown'), ver.get('built', '')),
+                  'device': ver.get('device', ''),
+                  'commit': ver.get('commit', ''),
+                  'built': ver.get('built', ''),
+                  'file': itb,
+                  'sha256': sha,
+                  'notes': 'automated build',
+              }
+              with open(os.path.join(out, 'version.json'), 'w') as f:
+                  json.dump(data, f, ensure_ascii=False)
+              print('version.json:', data['version'])
+          else:
+              print('WARN: no sysupgrade itb found, skip version.json')
+          PY
+          cp "$HOME"/out/version.json artifact/ 2>/dev/null || true
           cp "$HOME"/ponwrt-build-*.log artifact/ 2>/dev/null || true
           ls -lh artifact/ || true
 
@@ -107,7 +142,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ inputs.device_profile }}-$(date +%Y%m%d-%H%M)"
-          gh release create "$TAG" artifact/*.itb artifact/sha256sums artifact/ponwrt-version \
+          gh release create "$TAG" artifact/*.itb artifact/sha256sums artifact/ponwrt-version artifact/version.json \
             --title "${{ inputs.device_profile }} $TAG" \
             --notes "自动构建：ponwrt @ ${{ inputs.pin_commit }}" \
             --prerelease || true
