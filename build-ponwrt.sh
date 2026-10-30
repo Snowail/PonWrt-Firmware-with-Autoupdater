@@ -96,6 +96,14 @@ if [ ! -f package/luci-theme-aurora/Makefile ]; then
   rm -rf package/luci-theme-aurora/.git
 fi
 
+# libffi 3.4.7 自带 PKG_BUILD_PARALLEL:=1，其 make -j 会偶发不生成
+# aarch64-*/fficonfig.h，导致 Build/InstallDev 的 cp 失败。这里关掉它的并行。
+say "[3c/7] 关闭 libffi 的并行编译"
+sed -i 's/^PKG_BUILD_PARALLEL:=1$/PKG_BUILD_PARALLEL:=0/' package/libs/libffi/Makefile
+grep -q '^PKG_BUILD_PARALLEL:=0$' package/libs/libffi/Makefile \
+  && echo "  OK   libffi 已改为串行编译" \
+  || { echo "  !! 未能修改 libffi Makefile"; exit 1; }
+
 # ============================================================ 4. 配置
 say "[4/7] 生成 .config 并叠加定制项"
 cp "configs/${TARGET}.config" .config
@@ -152,10 +160,28 @@ make download -j4 || make download -j1 V=s
 
 # ============================================================ 6. 编译
 say "[6/7] 编译（-j$JOBS）"
-# 并行编译偶发 race（如 libffi 的 make -j 竞争），失败后用 -j1 V=s 重试：
-# 既是重试，也能把真实报错打出来。
+
+# libffi 的 Makefile 在高并发下会偶发 race：configure 的 stamp 已写、
+# 但 fficonfig.h 没生成，安装阶段就 cp 不到文件。先串行单独编它，
+# 之后的 world 编译就不会再碰（也不会留下半成品状态）。
+say "预编译 libffi（串行，规避并行 race）"
+make -j"$JOBS" toolchain/compile
+make -j1 package/libs/libffi/clean
+make -j1 package/libs/libffi/host-compile package/libs/libffi/compile
+
+# 冒烟测试：只验证到 ucode（libffi 的直接依赖方）就停，用于快速验证工具链
+if [ "${SMOKE:-0}" = "1" ]; then
+  say "SMOKE=1：验证 ucode 编译后退出"
+  make -j1 package/utils/ucode/compile
+  say "冒烟测试通过（toolchain + libffi + ucode）"
+  exit 0
+fi
+
+say "开始 world 编译"
 if ! make -j"$JOBS"; then
-  say "并行编译失败，改用 -j1 V=s 重试（会打印详细信息）"
+  FAILED="$(grep -oE 'ERROR: (package|feeds)/[^ ]+ failed' "$LOG" | tail -1 | awk '{print $2}')"
+  say "并行编译失败（$FAILED），清理该包后改用 -j1 V=s 重试"
+  [ -n "${FAILED:-}" ] && make "$FAILED/clean" || true
   make -j1 V=s || { echo "!! 编译失败"; exit 1; }
 fi
 
