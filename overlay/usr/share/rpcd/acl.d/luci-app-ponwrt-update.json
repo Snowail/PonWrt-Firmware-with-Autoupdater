@@ -4,9 +4,14 @@
 		"read": {
 			"file": {
 				"/usr/bin/ponwrt-update-check": [ "exec" ],
-				"/etc/ponwrt-version": [ "read" ]
+				"/etc/ponwrt-version": [ "read" ],
+				"/etc/ponwrt-update.proxy": [ "read" ]
 			}
 		},
-		"write": {}
+		"write": {
+			"file": {
+				"/etc/ponwrt-update.proxy": [ "write" ]
+			}
+		}
 	}
 }
