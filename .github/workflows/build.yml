@@ -63,7 +63,8 @@ jobs:
       - name: 缓存源码包 dl/
         uses: actions/cache@v4
         with:
-          path: ~/ponwrt/dl
+          # 放在源码树之外，否则 git clone 会因为 ~/ponwrt 已存在（缓存建的）而失败
+          path: ~/ponwrt-dl
           key: dl-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('build-ponwrt.sh') }}
           restore-keys: |
             dl-${{ inputs.soc }}-${{ inputs.pin_commit }}-
@@ -76,6 +77,7 @@ jobs:
           PONWRT_PIN: ${{ inputs.pin_commit }}
           PONWRT_JOBS: ${{ inputs.jobs }}
           PONWRT_SMOKE: ${{ inputs.smoke_only && '1' || '0' }}
+          PONWRT_DL: /home/runner/ponwrt-dl
           FORCE: '1'
         run: |
           chmod +x build-ponwrt.sh
