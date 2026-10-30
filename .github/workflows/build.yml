@@ -85,7 +85,8 @@ jobs:
         if: always()
         run: |
           mkdir -p artifact
-          cp out/* artifact/ 2>/dev/null || true
+          # 构建脚本把产物写到 $HOME/out（不是仓库目录下的 out/）
+          cp "$HOME"/out/* artifact/ 2>/dev/null || true
           cp "$HOME"/ponwrt-build-*.log artifact/ 2>/dev/null || true
           ls -lh artifact/ || true
 
