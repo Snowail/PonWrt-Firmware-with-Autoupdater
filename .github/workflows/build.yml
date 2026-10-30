@@ -85,6 +85,8 @@ jobs:
 
       - name: 收集产物
         if: always()
+        env:
+          DEVICE_PROFILE: ${{ inputs.device_profile }}
         run: |
           mkdir -p artifact
           # 构建脚本把产物写到 $HOME/out（不是仓库目录下的 out/）
@@ -101,11 +103,12 @@ jobs:
                   if k:
                       ver[k] = v
           sha, itb = '', ''
+          want = os.environ.get('DEVICE_PROFILE', '')
           sp = os.path.join(out, 'sha256sums')
           if os.path.exists(sp):
               for line in open(sp):
                   m = re.match(r'([0-9a-f]{64})\s+\*?(.+\.itb)', line.strip())
-                  if m and 'sysupgrade' in m.group(2):
+                  if m and 'sysupgrade' in m.group(2) and want and want in m.group(2):
                       sha, itb = m.group(1), m.group(2)
           if itb:
               data = {
