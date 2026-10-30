@@ -147,5 +147,4 @@ jobs:
           TAG="${{ inputs.device_profile }}-$(date +%Y%m%d-%H%M)"
           gh release create "$TAG" artifact/*.itb artifact/sha256sums artifact/ponwrt-version artifact/version.json \
             --title "${{ inputs.device_profile }} $TAG" \
-            --notes "自动构建：ponwrt @ ${{ inputs.pin_commit }}" \
-            --prerelease || true
+            --notes "自动构建：ponwrt @ ${{ inputs.pin_commit }}" || true
