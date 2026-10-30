@@ -1,0 +1,70 @@
+#!/bin/sh
+# ponwrt 固件更新检查 / 下载刷写
+#
+# 用法:
+#   ponwrt-update-check            人类可读输出
+#   ponwrt-update-check --json     输出 JSON（供 LuCI 页面解析）
+#   ponwrt-update-check --flash    下载最新固件、校验 SHA256、调用 sysupgrade
+#
+# 版本信息来自 GitHub Release 的 version.json：
+#   https://github.com/<repo>/releases/latest/download/version.json
+
+REPO="Snowail/PonWrt-Firmware-with-Autoupdater"
+BASE="https://github.com/${REPO}/releases/latest/download"
+TMPJ="/tmp/ponwrt-update.json"
+TMPF="/tmp/ponwrt-update.itb"
+LOCAL="/etc/ponwrt-version"
+
+json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+cur_built="$(sed -n 's/^built=//p' "$LOCAL" 2>/dev/null)"
+cur_commit="$(sed -n 's/^commit=//p' "$LOCAL" 2>/dev/null)"
+cur_device="$(sed -n 's/^device=//p' "$LOCAL" 2>/dev/null)"
+
+latest=""; lcommit=""; lbuilt=""; lfile=""; lsha=""; lnotes=""; err=""
+
+if wget -q -O "$TMPJ" --timeout=20 "$BASE/version.json" 2>/dev/null; then
+    latest="$(jsonfilter -i "$TMPJ" -e '@.version' 2>/dev/null)"
+    lcommit="$(jsonfilter -i "$TMPJ" -e '@.commit' 2>/dev/null)"
+    lbuilt="$(jsonfilter -i "$TMPJ" -e '@.built' 2>/dev/null)"
+    lfile="$(jsonfilter -i "$TMPJ" -e '@.file' 2>/dev/null)"
+    lsha="$(jsonfilter -i "$TMPJ" -e '@.sha256' 2>/dev/null)"
+    lnotes="$(jsonfilter -i "$TMPJ" -e '@.notes' 2>/dev/null)"
+    [ -n "$latest" ] || err="version.json 解析失败"
+else
+    err="无法访问 GitHub Release"
+fi
+
+update=0
+if [ -n "$latest" ] && [ "$lbuilt" != "$cur_built" ]; then update=1; fi
+
+case "${1:-}" in
+    --json)
+        printf '{"current":"%s","cur_built":"%s","cur_commit":"%s","device":"%s",' \
+            "$(json_esc "${cur_device:-unknown}")" "$(json_esc "$cur_built")" "$(json_esc "$cur_commit")" "$(json_esc "$cur_device")"
+        printf '"latest":"%s","latest_built":"%s","latest_commit":"%s","file":"%s","sha256":"%s","notes":"%s","update":%d,"error":"%s"}\n' \
+            "$(json_esc "$latest")" "$(json_esc "$lbuilt")" "$(json_esc "$lcommit")" \
+            "$(json_esc "$lfile")" "$(json_esc "$lsha")" "$(json_esc "$lnotes")" "$update" "$(json_esc "$err")"
+        ;;
+    --flash)
+        [ -n "$lfile" ] || { echo "没有可用的固件信息"; exit 1; }
+        [ "$update" = "1" ] || { echo "已是最新版本，无需刷写"; exit 0; }
+        echo "下载 $lfile ..."
+        if ! wget -q -O "$TMPF" --timeout=600 "$BASE/$lfile"; then
+            echo "下载失败"; exit 1
+        fi
+        echo "校验 SHA256 ..."
+        got="$(sha256sum "$TMPF" | awk '{print $1}')"
+        if [ "$got" != "$lsha" ]; then
+            echo "校验失败：期望 $lsha 实际 $got"; rm -f "$TMPF"; exit 1
+        fi
+        echo "校验通过，开始刷写（保留配置）..."
+        sysupgrade "$TMPF"
+        ;;
+    *)
+        echo "当前: ${cur_device:-unknown} / ${cur_built:-unknown} (${cur_commit})"
+        if [ -n "$err" ]; then echo "检查失败: $err"; exit 1; fi
+        echo "最新: $latest (${lbuilt})"
+        [ "$update" = "1" ] && echo "状态: 发现新版本" || echo "状态: 已是最新"
+        ;;
+esac
