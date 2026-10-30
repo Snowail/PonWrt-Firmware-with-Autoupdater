@@ -41,7 +41,7 @@ cur_device="$(sed -n 's/^device=//p' "$LOCAL" 2>/dev/null)"
 
 latest=""; lcommit=""; lbuilt=""; lfile=""; lsha=""; lnotes=""; err=""
 
-if fetch "$BASE/version.json" "$TMPJ"; then
+if fetch "$BASE/version.json?t=$(date +%s)" "$TMPJ" || fetch "$BASE/version.json" "$TMPJ"; then
     latest="$(jsonfilter -i "$TMPJ" -e '@.version' 2>/dev/null)"
     lcommit="$(jsonfilter -i "$TMPJ" -e '@.commit' 2>/dev/null)"
     lbuilt="$(jsonfilter -i "$TMPJ" -e '@.built' 2>/dev/null)"
