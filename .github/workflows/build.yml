@@ -31,6 +31,11 @@ on:
         required: false
         default: false
         type: boolean
+      smoke_only:
+        description: '冒烟测试：只编到 ucode 就停（约 25 分钟，用于验证工具链/libffi）'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -71,6 +76,7 @@ jobs:
           PIN_COMMIT: ${{ inputs.pin_commit }}
           JOBS: ${{ inputs.jobs }}
           FORCE: '1'
+          SMOKE: ${{ inputs.smoke_only && '1' || '0' }}
         run: |
           chmod +x build-ponwrt.sh
           ./build-ponwrt.sh
