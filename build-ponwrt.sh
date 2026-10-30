@@ -2,28 +2,29 @@
 #
 # 通用构建脚本：pbs05/ponwrt + 自定义 LuCI 主题/中文/常用插件
 #
-# 可用环境变量：
-#   TARGET      SoC 目标，默认 an7581（可选 an7583）
-#   DEVICE      设备 profile，默认 nokia_xg-040g-md-ubi
-#   PIN_COMMIT  ponwrt 提交，默认 03c1345
-#   JOBS        并发，默认按 nproc / 内存自动
-#   SRC_DIR     源码目录，默认 $HOME/ponwrt
-#   OUT_DIR     产物目录，默认 $HOME/out
-#   SMOKE=1     冒烟测试：只编到 toolchain + libffi + ucode 就停
+# 可用环境变量（统一 PONWRT_ 前缀，避免与 autotools 的通用变量撞名）：
+#   PONWRT_SOC      SoC 目标，默认 an7581（可选 an7583）
+#   PONWRT_DEVICE   设备 profile，默认 nokia_xg-040g-md-ubi
+#   PONWRT_PIN      ponwrt 提交，默认 03c1345
+#   PONWRT_JOBS     并发，默认按 nproc / 内存自动
+#   PONWRT_SMOKE=1  冒烟测试：只编到 toolchain + libffi + ucode 就停
+#   SRC_DIR         源码目录，默认 $HOME/ponwrt
+#   OUT_DIR         产物目录，默认 $HOME/out
 #
 set -euo pipefail
 
 # ---------------------------------------------------------------- 变量
-# 注意：TARGET / DEVICE 等若以**环境变量**形式传入，会被子 make 继承。
-# libffi 的 configure 会拿 TARGET 当构建子目录名（变成 an7581 而不是
-# aarch64-openwrt-linux-gnu），导致 Build/InstallDev 阶段 cp fficonfig.h 失败。
-# 所以这里先复制到内部变量，再从环境中彻底 unset。
-SOC="${TARGET:-an7581}"
-DEV="${DEVICE:-nokia_xg-040g-md-ubi}"
-PIN="${PIN_COMMIT:-03c134544714617e196dd399c85ebb90fb6eefa1}"
-NJOBS="${JOBS:-}"
-SMOKE_MODE="${SMOKE:-0}"
-unset TARGET DEVICE JOBS PIN_COMMIT SMOKE FORCE
+# 绝对不能把 TARGET / DEVICE 这类通用名字以环境变量传给子 make：
+# libffi 的 Makefile 里 TARGET 是“构建子目录名”，会被覆盖成 an7581，
+# 导致 Build/InstallDev 阶段找不到 aarch64-openwrt-linux-*/fficonfig.h。
+# 这里只接受 PONWRT_* 前缀，并兼容旧写法后立刻从环境里删掉。
+SOC="${PONWRT_SOC:-${TARGET:-an7581}}"
+DEV="${PONWRT_DEVICE:-${DEVICE:-nokia_xg-040g-md-ubi}}"
+PIN="${PONWRT_PIN:-${PIN_COMMIT:-03c134544714617e196dd399c85ebb90fb6eefa1}}"
+NJOBS="${PONWRT_JOBS:-${JOBS:-}}"
+SMOKE_MODE="${PONWRT_SMOKE:-${SMOKE:-0}}"
+unset TARGET DEVICE JOBS PIN_COMMIT SMOKE FORCE \
+      PONWRT_SOC PONWRT_DEVICE PONWRT_PIN PONWRT_JOBS PONWRT_SMOKE
 
 REPO_URL="${REPO_URL:-https://github.com/pbs05/ponwrt.git}"
 SRC_DIR="${SRC_DIR:-$HOME/ponwrt}"
