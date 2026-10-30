@@ -2,18 +2,36 @@
 # ponwrt 固件更新检查 / 下载刷写
 #
 # 用法:
-#   ponwrt-update-check            人类可读输出
-#   ponwrt-update-check --json     输出 JSON（供 LuCI 页面解析）
-#   ponwrt-update-check --flash    下载最新固件、校验 SHA256、调用 sysupgrade
+#   ponwrt-update-check                 人类可读输出
+#   ponwrt-update-check --json          输出 JSON（供 LuCI 页面解析）
+#   ponwrt-update-check --flash         下载最新固件、校验 SHA256、调用 sysupgrade
+#   ponwrt-update-check --proxy URL ... 临时指定代理
 #
-# 版本信息来自 GitHub Release 的 version.json：
-#   https://github.com/<repo>/releases/latest/download/version.json
+# GitHub 代理配置：/etc/ponwrt-update.proxy（内容形如 http://10.0.0.5:7897）
+# 未配置时代理为空，先试直连；配置了则先走代理，失败再回退直连。
 
 REPO="Snowail/PonWrt-Firmware-with-Autoupdater"
 BASE="https://github.com/${REPO}/releases/latest/download"
 TMPJ="/tmp/ponwrt-update.json"
 TMPF="/tmp/ponwrt-update.itb"
 LOCAL="/etc/ponwrt-version"
+PROXY_FILE="/etc/ponwrt-update.proxy"
+
+PROXY=""
+case "${1:-}" in
+    --proxy) PROXY="$2"; shift 2 ;;
+esac
+[ -z "$PROXY" ] && [ -f "$PROXY_FILE" ] && PROXY="$(sed -n '1p' "$PROXY_FILE" | tr -d '\r\n')"
+
+# fetch <url> <out> [timeout]
+fetch() {
+    if [ -n "$PROXY" ]; then
+        curl -fsSL --max-time "${3:-25}" -x "$PROXY" -o "$2" "$1" 2>/dev/null && return 0
+        curl -fsSL --max-time "${3:-25}" --noproxy '*' -o "$2" "$1" 2>/dev/null && return 0
+        return 1
+    fi
+    curl -fsSL --max-time "${3:-25}" -o "$2" "$1" 2>/dev/null
+}
 
 json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
@@ -23,7 +41,7 @@ cur_device="$(sed -n 's/^device=//p' "$LOCAL" 2>/dev/null)"
 
 latest=""; lcommit=""; lbuilt=""; lfile=""; lsha=""; lnotes=""; err=""
 
-if wget -q -O "$TMPJ" --timeout=20 "$BASE/version.json" 2>/dev/null; then
+if fetch "$BASE/version.json" "$TMPJ"; then
     latest="$(jsonfilter -i "$TMPJ" -e '@.version' 2>/dev/null)"
     lcommit="$(jsonfilter -i "$TMPJ" -e '@.commit' 2>/dev/null)"
     lbuilt="$(jsonfilter -i "$TMPJ" -e '@.built' 2>/dev/null)"
@@ -32,7 +50,7 @@ if wget -q -O "$TMPJ" --timeout=20 "$BASE/version.json" 2>/dev/null; then
     lnotes="$(jsonfilter -i "$TMPJ" -e '@.notes' 2>/dev/null)"
     [ -n "$latest" ] || err="version.json 解析失败"
 else
-    err="无法访问 GitHub Release"
+    err="无法访问 GitHub Release（可设置代理后重试）"
 fi
 
 update=0
@@ -42,17 +60,16 @@ case "${1:-}" in
     --json)
         printf '{"current":"%s","cur_built":"%s","cur_commit":"%s","device":"%s",' \
             "$(json_esc "${cur_device:-unknown}")" "$(json_esc "$cur_built")" "$(json_esc "$cur_commit")" "$(json_esc "$cur_device")"
-        printf '"latest":"%s","latest_built":"%s","latest_commit":"%s","file":"%s","sha256":"%s","notes":"%s","update":%d,"error":"%s"}\n' \
+        printf '"latest":"%s","latest_built":"%s","latest_commit":"%s","file":"%s","sha256":"%s","notes":"%s","update":%d,"error":"%s","proxy":"%s"}\n' \
             "$(json_esc "$latest")" "$(json_esc "$lbuilt")" "$(json_esc "$lcommit")" \
-            "$(json_esc "$lfile")" "$(json_esc "$lsha")" "$(json_esc "$lnotes")" "$update" "$(json_esc "$err")"
+            "$(json_esc "$lfile")" "$(json_esc "$lsha")" "$(json_esc "$lnotes")" "$update" \
+            "$(json_esc "$err")" "$(json_esc "$PROXY")"
         ;;
     --flash)
         [ -n "$lfile" ] || { echo "没有可用的固件信息"; exit 1; }
         [ "$update" = "1" ] || { echo "已是最新版本，无需刷写"; exit 0; }
         echo "下载 $lfile ..."
-        if ! wget -q -O "$TMPF" --timeout=600 "$BASE/$lfile"; then
-            echo "下载失败"; exit 1
-        fi
+        fetch "$BASE/$lfile" "$TMPF" 900 || { echo "下载失败"; exit 1; }
         echo "校验 SHA256 ..."
         got="$(sha256sum "$TMPF" | awk '{print $1}')"
         if [ "$got" != "$lsha" ]; then
@@ -62,6 +79,7 @@ case "${1:-}" in
         sysupgrade "$TMPF"
         ;;
     *)
+        [ -n "$PROXY" ] && echo "代理: $PROXY"
         echo "当前: ${cur_device:-unknown} / ${cur_built:-unknown} (${cur_commit})"
         if [ -n "$err" ]; then echo "检查失败: $err"; exit 1; fi
         echo "最新: $latest (${lbuilt})"
