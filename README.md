@@ -68,9 +68,9 @@
 - `pin_commit`：留默认（`03c1345`）
 - `jobs`：`4`
 - `make_release`：需要发 Release 时勾上
-- `smoke_only`：只编到 toolchain + libffi + ucode 就停，用于快速验证（约 25 分钟）
+- `smoke_only`：只编到 toolchain + libffi + ucode 就停，用于快速验证（约 50–70 分钟）
 
-构建约 **60–90 分钟**，完成后在运行页面下载 artifact。
+构建约 **2–4 小时**（GitHub 托管 runner 是 4 vCPU / 16 GB，完整编工具链 + 内核 + 全部软件包）。
 
 > 只有勾选 `make_release` 的构建才会发 Release；平时手动触发的构建只上传 **Artifact**（保留 30 天），在运行页面下载。
 
