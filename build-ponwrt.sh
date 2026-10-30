@@ -23,8 +23,9 @@ DEV="${PONWRT_DEVICE:-${DEVICE:-nokia_xg-040g-md-ubi}}"
 PIN="${PONWRT_PIN:-${PIN_COMMIT:-03c134544714617e196dd399c85ebb90fb6eefa1}}"
 NJOBS="${PONWRT_JOBS:-${JOBS:-}}"
 SMOKE_MODE="${PONWRT_SMOKE:-${SMOKE:-0}}"
+DL_DIR="${PONWRT_DL:-}"
 unset TARGET DEVICE JOBS PIN_COMMIT SMOKE FORCE \
-      PONWRT_SOC PONWRT_DEVICE PONWRT_PIN PONWRT_JOBS PONWRT_SMOKE
+      PONWRT_SOC PONWRT_DEVICE PONWRT_PIN PONWRT_JOBS PONWRT_SMOKE PONWRT_DL
 
 REPO_URL="${REPO_URL:-https://github.com/pbs05/ponwrt.git}"
 SRC_DIR="${SRC_DIR:-$HOME/ponwrt}"
@@ -89,6 +90,14 @@ fi
 cd "$SRC_DIR"
 git checkout "$PIN"
 echo "commit: $(git rev-parse HEAD)  $(git log -1 --format='%cd %s' --date=short)"
+
+# 可选的持久化下载缓存（CI 用）：把源码树里的 dl/ 指到缓存目录
+if [ -n "$DL_DIR" ]; then
+  mkdir -p "$DL_DIR"
+  rm -rf dl
+  ln -s "$DL_DIR" dl
+  echo "dl 缓存: $DL_DIR"
+fi
 
 # ============================================================ 3. feeds
 say "[3/7] 安装 feeds"
