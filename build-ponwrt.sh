@@ -46,6 +46,7 @@ EXTRA_PACKAGES=(
   "CONFIG_PACKAGE_luci-app-zerotier=y"
   "CONFIG_PACKAGE_iperf3=y"
   "CONFIG_PACKAGE_luci-app-nlbwmon=y"       # 设备列表 / 按设备流量
+  "CONFIG_PACKAGE_curl=y"                    # 更新检查需要（支持代理）
 )
 
 exec > >(tee -a "$LOG") 2>&1
