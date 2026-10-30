@@ -59,13 +59,9 @@
 例：`ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb`
 = SoC `an7581` + 设备 `nokia_xg-040g-md-ubi` 的正式固件。
 
-> 只有勾选 `make_release` 的构建才会发 Release；平时手动触发的构建只上传 **Artifact**（保留 30 天），在运行页面下载。
-
 ### 方式 A：GitHub Actions 自行编译
 
-**需要先 Fork 本仓库到你自己的账号**（Workflow 需要仓库写权限，直接在本仓库只能看、不能触发）。
-
-Fork 之后：**Actions → Build ponwrt firmware → Run workflow**，参数：
+**Actions → Build ponwrt firmware → Run workflow**，参数：
 
 - `soc`：`an7581`（XG-040G-MD 及其它 AN7581 机型）；XG-040G-MF 用 `an7583`
 - `device_profile`：`nokia_xg-040g-md-ubi`
@@ -76,8 +72,9 @@ Fork 之后：**Actions → Build ponwrt firmware → Run workflow**，参数：
 
 构建约 **60–90 分钟**，完成后在运行页面下载 artifact。
 
+> 只有勾选 `make_release` 的构建才会发 Release；平时手动触发的构建只上传 **Artifact**（保留 30 天），在运行页面下载。
+
 `dl/` 会被 `actions/cache` 缓存，第二次起省去约 2.5 GB 下载。
-私有仓库每月 2000 Actions 分钟；**公开仓库不限量**。
 
 ### 方式 B：本地 / 自己的服务器
 
