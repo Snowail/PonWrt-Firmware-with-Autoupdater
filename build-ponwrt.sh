@@ -112,6 +112,19 @@ if [ ! -f package/luci-theme-aurora/Makefile ]; then
   rm -rf package/luci-theme-aurora/.git
 fi
 
+say "[3d/7] 注入 overlay（更新检查脚本 + ACL）并给备份/升级页打补丁"
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+mkdir -p files
+[ -d "$REPO_DIR/overlay" ] && cp -a "$REPO_DIR/overlay/." files/
+chmod +x files/usr/bin/ponwrt-update-check 2>/dev/null || true
+
+FLASH_JS="feeds/luci/modules/luci-mod-system/htdocs/luci-static/resources/view/system/flash.js"
+if [ -f "$FLASH_JS" ]; then
+  python3 "$REPO_DIR/tools/patch-flash.py" "$FLASH_JS"
+else
+  echo "  !! 未找到 $FLASH_JS，跳过补丁"
+fi
+
 # 双保险：libffi 3.4.7 自带 PKG_BUILD_PARALLEL:=1，其 make -j 也可能出问题
 say "[3c/7] 关闭 libffi 的并行编译"
 sed -i 's/^PKG_BUILD_PARALLEL:=1$/PKG_BUILD_PARALLEL:=0/' package/libs/libffi/Makefile
