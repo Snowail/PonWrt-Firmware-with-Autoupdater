@@ -30,7 +30,7 @@
 
 ## 三、支持机型
 
-由 `configs/<target>.config` 决定，当前默认构建 `nokia_xg-040g-md-ubi`（Nokia XG-040G-MD，UBI 布局）。
+由 `configs/<soc>.config` 决定，当前默认构建 `nokia_xg-040g-md-ubi`（Nokia XG-040G-MD，UBI 布局）。
 同一份 `an7581` 配置里的其它 profile 也可以直接构建：
 
 | SoC | 设备 profile | 机型 |
@@ -49,22 +49,27 @@
 
 1. 打开仓库 **Actions → Build ponwrt firmware → Run workflow**
 2. 填参数：
-   - `target`：`an7581`（XG-040G-MD/MF 之外的 7581 机型也用它）
-   - `device`：`nokia_xg-040g-md-ubi`
+   - `soc`：`an7581`（XG-040G-MD 及其它 AN7581 机型）；XG-040G-MF 用 `an7583`
+   - `device_profile`：`nokia_xg-040g-md-ubi`
    - `pin_commit`：留默认（`03c1345`）
    - `jobs`：`4`
    - `make_release`：需要发 Release 时勾上
+   - `smoke_only`：只编到 toolchain + libffi + ucode 就停，用于快速验证（约 25 分钟）
 3. 构建约 **60–90 分钟**，完成后在运行页面下载 artifact（保留 30 天）
 
 `dl/` 会被 `actions/cache` 缓存，第二次起省去约 2.5 GB 下载。
 私有仓库每月 2000 Actions 分钟；**公开仓库不限量**。
 
+> 参数名特意用了 `soc` / `device_profile`，而不是 `target` / `device`。
+> 因为 `TARGET`、`DEVICE` 这类通用名字一旦作为环境变量传给 `make`，会被各个子项目的
+> Makefile 当成自己的变量（例如 libffi 会把 `TARGET` 当作构建子目录名），造成极难排查的构建失败。
+
 ### 方式 B：本地 / 自己的服务器
 
 ```bash
 sudo ./build-ponwrt.sh          # 自动装依赖、编译、产物放 ~/out
-# 可选：
-TARGET=an7581 DEVICE=nokia_xg-040g-md-ubi JOBS=8 ./build-ponwrt.sh
+# 可选（全部带 PONWRT_ 前缀，避免和 autotools 变量撞名）：
+PONWRT_SOC=an7581 PONWRT_DEVICE=nokia_xg-040g-md-ubi PONWRT_JOBS=8 ./build-ponwrt.sh
 ```
 
 要求：Ubuntu 22.04/24.04 x86_64、≥4 核、≥8 GB 内存、≥40 GB 磁盘（首次全量约 20–25 GB）。
