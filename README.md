@@ -26,7 +26,6 @@
   - [ZeroTier](https://www.zerotier.com/)（`zerotier` + LuCI 界面）
   - `iperf3`（测速）
   - `nlbwmon`（按设备流量统计，LuCI「状态 → nlbwmon」）
-- **不包含**：PPPoE 账号、PON 的 SN/LOID、root 密码、任何个人配置
 
 ## 三、支持机型
 
@@ -88,17 +87,17 @@ docker exec -it ponwrt bash -c 'bash /build/build-ponwrt.sh'
 2. **正式刷**：恢复页 →「日常刷机」，上传 `*-squashfs-sysupgrade.itb`
    - 只写 `fit` 卷，`bosa`（光模块校准）与 `ri`（出厂 MAC）**不会**被清掉
    - **不要勾「重建 UBI」**，除非你确实要清空整片闪存
-3. **首次开机**后必须配置（镜像内没有个人数据）：
+3. **首次开机**后按你的线路参数配置：
    - LuCI（`http://10.0.0.1`）→ 网络 → PON：填 **XGPON 模式、光模块 SN、LOID/注册号**
    - 网络 → 接口 → WAN：`pon0.81` 上做 **PPPoE 拨号**
    - 系统 → 管理权：设置 root 密码
-   - 如果你之前用 `sysupgrade -b` 备份过：**系统 → 备份/升级 → 上传归档** 一次性恢复
+   - 如果之前用 `sysupgrade -b` 备份过：**系统 → 备份/升级 → 上传归档** 一次性恢复
 
 ## 六、升级
 
 - 日常升级用 LuCI「系统 → 备份/升级 → 刷写新固件」，或 `sysupgrade -n <itb>`
 - `sysupgrade` 会保留 `/etc/config`（PON、PPPoE、静态租约、ZeroTier 身份等）
-- 镜像里的 `uci-defaults` 只设置主题/语言/LAN 段；**不会**覆盖你的 PON、PPPoE、root 密码
+- 镜像里的 `uci-defaults` 只设置主题/语言/LAN 网段，不涉及 PON 与 PPPoE
 
 ## 七、路线图
 
