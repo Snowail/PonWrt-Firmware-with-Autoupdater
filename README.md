@@ -2,7 +2,6 @@
 
 本仓库用 GitHub Actions 自动构建 **pbs05/ponwrt** 固件（ImmortalWrt + Airoha AN7581/AN7583 的 PON 支持），
 并叠加了一套通用定制：Aurora 主题、简体中文、常用插件、固定 LAN 网段。
-**镜像不含任何个人数据**，任何人都可以直接使用，刷完自行配置。
 
 ---
 
@@ -25,7 +24,7 @@
 - 预装插件：
   - [ZeroTier](https://www.zerotier.com/)（`zerotier` + LuCI 界面）
   - `iperf3`（测速）
-  - `nlbwmon`（按设备流量统计，LuCI「状态 → nlbwmon」）
+  - `nlbwmon`（按设备流量统计，LuCI「服务 → 带宽监控」）
 
 ## 三、支持机型
 
@@ -42,32 +41,49 @@
 
 > 机型与引导器必须匹配。TF 机型有安全启动，不能混用 MD 的引导文件。
 
-## 四、如何构建
+## 四、获取与构建
 
-### 方式 A：GitHub Actions（推荐，免费）
+### 直接下载（推荐）
 
-1. 打开仓库 **Actions → Build ponwrt firmware → Run workflow**
-2. 填参数：
-   - `soc`：`an7581`（XG-040G-MD 及其它 AN7581 机型）；XG-040G-MF 用 `an7583`
-   - `device_profile`：`nokia_xg-040g-md-ubi`
-   - `pin_commit`：留默认（`03c1345`）
-   - `jobs`：`4`
-   - `make_release`：需要发 Release 时勾上
-   - `smoke_only`：只编到 toolchain + libffi + ucode 就停，用于快速验证（约 25 分钟）
-3. 构建约 **60–90 分钟**，完成后在运行页面下载 artifact（保留 30 天）
+**Releases** 里是已经构建好的镜像，不用自己编译。命名规则：
+
+| 名称 | 含义 |
+| --- | --- |
+| Release tag：`<device_profile>-<YYYYMMDD-HHMM>` | 例：`nokia_xg-040g-md-ubi-20261030-2105` |
+| Release 标题：`<device_profile> <tag>` | 同一 tag |
+| `ponwrt-airoha-<soc>-<device_profile>-squashfs-sysupgrade.itb` | **正式固件**，U-Boot「日常刷机」用 |
+| `ponwrt-airoha-<soc>-<device_profile>-initramfs-recovery.itb` | **试跑固件**，U-Boot「试跑固件」用 |
+| `sha256sums` | 所有镜像的 SHA256 校验值 |
+| `ponwrt-version` | 编译时的 commit / 设备 / 时间 |
+
+例：`ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb`
+= SoC `an7581` + 设备 `nokia_xg-040g-md-ubi` 的正式固件。
+
+> 只有勾选 `make_release` 的构建才会发 Release；平时手动触发的构建只上传 **Artifact**（保留 30 天），在运行页面下载。
+
+### 方式 A：GitHub Actions 自行编译
+
+**需要先 Fork 本仓库到你自己的账号**（Workflow 需要仓库写权限，直接在本仓库只能看、不能触发）。
+
+Fork 之后：**Actions → Build ponwrt firmware → Run workflow**，参数：
+
+- `soc`：`an7581`（XG-040G-MD 及其它 AN7581 机型）；XG-040G-MF 用 `an7583`
+- `device_profile`：`nokia_xg-040g-md-ubi`
+- `pin_commit`：留默认（`03c1345`）
+- `jobs`：`4`
+- `make_release`：需要发 Release 时勾上
+- `smoke_only`：只编到 toolchain + libffi + ucode 就停，用于快速验证（约 25 分钟）
+
+构建约 **60–90 分钟**，完成后在运行页面下载 artifact。
 
 `dl/` 会被 `actions/cache` 缓存，第二次起省去约 2.5 GB 下载。
 私有仓库每月 2000 Actions 分钟；**公开仓库不限量**。
-
-> 参数名特意用了 `soc` / `device_profile`，而不是 `target` / `device`。
-> 因为 `TARGET`、`DEVICE` 这类通用名字一旦作为环境变量传给 `make`，会被各个子项目的
-> Makefile 当成自己的变量（例如 libffi 会把 `TARGET` 当作构建子目录名），造成极难排查的构建失败。
 
 ### 方式 B：本地 / 自己的服务器
 
 ```bash
 sudo ./build-ponwrt.sh          # 自动装依赖、编译、产物放 ~/out
-# 可选（全部带 PONWRT_ 前缀，避免和 autotools 变量撞名）：
+# 可选参数：
 PONWRT_SOC=an7581 PONWRT_DEVICE=nokia_xg-040g-md-ubi PONWRT_JOBS=8 ./build-ponwrt.sh
 ```
 
