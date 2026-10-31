@@ -127,8 +127,26 @@ jobs:
               print('WARN: no sysupgrade itb found, skip version.json')
           PY
           cp "$HOME"/out/version.json artifact/ 2>/dev/null || true
+          # 顺带把更新插件的 .apk 带出来，方便单独安装测试
+          cp "$HOME"/ponwrt/bin/packages/*/luci/luci-app-ponwrt-update*.apk artifact/ 2>/dev/null || true
+          cp "$HOME"/ponwrt/bin/packages/*/packages/curl-*.apk artifact/ 2>/dev/null || true
+          cp "$HOME"/ponwrt/bin/packages/*/packages/jsonfilter-*.apk artifact/ 2>/dev/null || true
           cp "$HOME"/ponwrt-build-*.log artifact/ 2>/dev/null || true
           ls -lh artifact/ || true
+
+      - name: 回写 version.json 到仓库
+        if: success()
+        run: |
+          if [ -f "$HOME/out/version.json" ]; then
+            cp "$HOME/out/version.json" ./version.json
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add version.json
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: update version.json [skip ci]"
+              git push || true
+            fi
+          fi
 
       - name: 上传 Artifact
         if: always()
