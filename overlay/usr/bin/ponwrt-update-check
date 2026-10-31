@@ -39,8 +39,9 @@ json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 cur_built="$(sed -n 's/^built=//p' "$LOCAL" 2>/dev/null)"
 cur_commit="$(sed -n 's/^commit=//p' "$LOCAL" 2>/dev/null)"
 cur_device="$(sed -n 's/^device=//p' "$LOCAL" 2>/dev/null)"
+cur_target="$(sed -n 's/^target=//p' "$LOCAL" 2>/dev/null)"
 
-latest=""; lcommit=""; lbuilt=""; lfile=""; lsha=""; lnotes=""; err=""
+latest=""; lcommit=""; lbuilt=""; lfile=""; lsha=""; lnotes=""; lurl=""; err=""
 
 # 优先取仓库里的 version.json（raw 的缓存很短），再退回 Release 资产
 if fetch "$RAW?t=$(date +%s)" "$TMPJ" || fetch "$RAW" "$TMPJ" || \
@@ -51,13 +52,31 @@ if fetch "$RAW?t=$(date +%s)" "$TMPJ" || fetch "$RAW" "$TMPJ" || \
     lfile="$(jsonfilter -i "$TMPJ" -e '@.file' 2>/dev/null)"
     lsha="$(jsonfilter -i "$TMPJ" -e '@.sha256' 2>/dev/null)"
     lnotes="$(jsonfilter -i "$TMPJ" -e '@.notes' 2>/dev/null)"
+    ldevice="$(jsonfilter -i "$TMPJ" -e '@.device' 2>/dev/null)"
+    lurl="$(jsonfilter -i "$TMPJ" -e '@.download_url' 2>/dev/null)"
     [ -n "$latest" ] || err="version.json 解析失败"
+    if [ -z "$cur_device" ] || [ -z "$cur_target" ] || [ "$ldevice" != "$cur_device" ] || \
+       [ "$lfile" != "ponwrt-airoha-${cur_target}-${cur_device}-squashfs-sysupgrade.itb" ]; then
+        err="固件机型与当前设备不匹配"
+    fi
+    if ! printf '%s\n' "$lsha" | grep -Eq '^[0-9a-f]{64}$'; then err="固件校验信息无效"; fi
+    if [ -n "$lurl" ]; then
+        case "$lurl" in
+            "https://github.com/${REPO}/releases/download/"*"/$lfile") ;;
+            *) err="固件下载地址无效" ;;
+        esac
+    else
+        lurl="$BASE/$lfile"
+    fi
 else
     err="无法访问 GitHub Release（可设置代理后重试）"
 fi
 
 update=0
-if [ -n "$latest" ] && [ "$lbuilt" != "$cur_built" ]; then update=1; fi
+if [ -z "$err" ] && [ -n "$latest" ] && \
+   LC_ALL=C awk -v latest="$lbuilt" -v current="$cur_built" 'BEGIN { exit !(("x" latest) > ("x" current)) }'; then
+    update=1
+fi
 
 case "${1:-}" in
     --json)
@@ -69,15 +88,17 @@ case "${1:-}" in
             "$(json_esc "$err")" "$(json_esc "$PROXY")"
         ;;
     --flash)
+        [ -z "$err" ] || { echo "$err"; exit 1; }
         [ -n "$lfile" ] || { echo "没有可用的固件信息"; exit 1; }
         [ "$update" = "1" ] || { echo "已是最新版本，无需刷写"; exit 0; }
         echo "下载 $lfile ..."
-        fetch "$BASE/$lfile" "$TMPF" 900 || { echo "下载失败"; exit 1; }
+        fetch "$lurl" "$TMPF" 900 || { echo "下载失败"; exit 1; }
         echo "校验 SHA256 ..."
         got="$(sha256sum "$TMPF" | awk '{print $1}')"
         if [ "$got" != "$lsha" ]; then
             echo "校验失败：期望 $lsha 实际 $got"; rm -f "$TMPF"; exit 1
         fi
+        sysupgrade -T "$TMPF" || { echo "设备固件兼容性检查失败"; exit 1; }
         echo "校验通过，开始刷写（保留配置）..."
         sysupgrade "$TMPF"
         ;;

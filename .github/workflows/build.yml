@@ -6,57 +6,84 @@ on:
       soc:
         description: 'SoC 目标'
         required: true
-        default: 'an7581'
+        default: an7581
         type: choice
-        options:
-          - an7581
-          - an7583
+        options: [an7581, an7583]
       device_profile:
-        description: '设备 profile（对应 configs/<soc>.config 里的 CONFIG_TARGET_DEVICE_*）'
+        description: '设备 profile（只构建此机型）'
         required: true
-        default: 'nokia_xg-040g-md-ubi'
+        default: nokia_xg-040g-md-ubi
         type: string
       pin_commit:
-        description: 'ponwrt 提交'
-        required: false
-        default: '03c134544714617e196dd399c85ebb90fb6eefa1'
+        description: 'ponwrt 完整 commit SHA；feeds 和主题由 sources.lock.json 固定'
+        required: true
+        default: 03c134544714617e196dd399c85ebb90fb6eefa1
         type: string
       jobs:
-        description: 'make -j（runner 4 核，建议 4）'
-        required: false
+        description: 'make -j，默认 4'
+        required: true
         default: '4'
         type: string
       make_release:
-        description: '构建成功后发布到 Release'
-        required: false
+        description: '完整构建校验通过后发布 Release（首次诊断请关闭）'
         default: false
         type: boolean
       smoke_only:
-        description: '冒烟测试：只编到 ucode 就停（约 25 分钟，用于验证工具链/libffi）'
-        required: false
+        description: '仅验证工具链、libffi、ucode；不能发布'
         default: false
         type: boolean
       packages_only:
-        description: '只编译更新插件的三个 .apk（curl / jsonfilter / luci-app-ponwrt-update），不出镜像'
-        required: false
+        description: '仅编译更新后端、curl、jsonfilter；不能发布'
         default: false
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
+# Serialize publication as well as cache writes; do not interrupt a running build.
 concurrency:
-  group: build-${{ inputs.soc }}-${{ inputs.device_profile }}
+  group: ponwrt-build-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 360
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      PONWRT_SOC: ${{ inputs.soc }}
+      PONWRT_DEVICE: ${{ inputs.device_profile }}
+      PONWRT_PIN: ${{ inputs.pin_commit }}
+      PONWRT_JOBS: ${{ inputs.jobs }}
+      PONWRT_SMOKE: ${{ inputs.smoke_only && '1' || '0' }}
+      PONWRT_PKGS: ${{ inputs.packages_only && '1' || '0' }}
+      PONWRT_DL: /home/runner/ponwrt-dl
+      DIAG_DIR: /home/runner/ponwrt-diagnostics
 
     steps:
-      - name: 取出仓库（workflow + 构建脚本）
+      - name: 取出构建脚本
         uses: actions/checkout@v4
+
+      - name: 参数与脚本预检
+        env:
+          RELEASE: ${{ inputs.make_release }}
+        run: |
+          [[ "$PONWRT_SOC" =~ ^an758[13]$ ]]
+          [[ "$PONWRT_DEVICE" =~ ^[a-z0-9][a-z0-9_-]+$ ]]
+          [[ "$PONWRT_PIN" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PONWRT_JOBS" =~ ^[1-9][0-9]?$ ]]
+          [[ "$PONWRT_SMOKE$PONWRT_PKGS" != 11 ]]
+          if [[ "$RELEASE" == true ]]; then
+            [[ "$PONWRT_SMOKE$PONWRT_PKGS" == 00 && "$GITHUB_REF" == refs/heads/main ]]
+          fi
+          bash -n build-ponwrt.sh tools/build-lib.sh
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          bash tests/test-build-lib.sh
+          bash tests/test-update.sh
 
       - name: 释放磁盘空间
         run: |
@@ -65,110 +92,91 @@ jobs:
           sudo apt-get clean
           df -h /
 
-      - name: 缓存源码包 dl/
-        uses: actions/cache@v4
+      - name: 恢复下载缓存
+        id: dl
+        uses: actions/cache/restore@v4
         with:
-          # 放在源码树之外，否则 git clone 会因为 ~/ponwrt 已存在（缓存建的）而失败
           path: ~/ponwrt-dl
-          key: dl-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('build-ponwrt.sh') }}
+          key: dl-v2-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            dl-${{ inputs.soc }}-${{ inputs.pin_commit }}-
-            dl-${{ inputs.soc }}-
+            dl-v2-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-
+            dl-v2-${{ runner.os }}-${{ inputs.soc }}-
 
-      - name: 编译
+      - name: 恢复编译缓存
+        id: ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/ponwrt-ccache
+          key: cc-v1-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json', 'build-ponwrt.sh', 'tools/**', 'package/**', 'overlay/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            cc-v1-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-
+
+      - name: 编译与产物校验
+        id: compile
+        timeout-minutes: 325
         env:
-          PONWRT_SOC: ${{ inputs.soc }}
-          PONWRT_DEVICE: ${{ inputs.device_profile }}
-          PONWRT_PIN: ${{ inputs.pin_commit }}
-          PONWRT_JOBS: ${{ inputs.jobs }}
-          PONWRT_SMOKE: ${{ inputs.smoke_only && '1' || '0' }}
-          PONWRT_PKGS: ${{ inputs.packages_only && '1' || '0' }}
-          PONWRT_DL: /home/runner/ponwrt-dl
-          FORCE: '1'
-        run: |
-          chmod +x build-ponwrt.sh
-          ./build-ponwrt.sh
+          CCACHE_MAXSIZE: 2G
+        run: bash build-ponwrt.sh
 
-      - name: 收集产物
+      - name: 收集诊断和已校验产物
+        id: collect
         if: always()
-        env:
-          DEVICE_PROFILE: ${{ inputs.device_profile }}
         run: |
-          mkdir -p artifact
-          # 构建脚本把产物写到 $HOME/out（不是仓库目录下的 out/）
-          cp "$HOME"/out/* artifact/ 2>/dev/null || true
-          # 生成 version.json：固件内的更新检查靠它判断版本
-          python3 - <<'PY'
-          import json, os, re
-          out = os.path.expanduser('~/out')
-          ver = {}
-          p = os.path.join(out, 'ponwrt-version')
-          if os.path.exists(p):
-              for line in open(p):
-                  k, _, v = line.strip().partition('=')
-                  if k:
-                      ver[k] = v
-          sha, itb = '', ''
-          want = os.environ.get('DEVICE_PROFILE', '')
-          sp = os.path.join(out, 'sha256sums')
-          if os.path.exists(sp):
-              for line in open(sp):
-                  m = re.match(r'([0-9a-f]{64})\s+\*?(.+\.itb)', line.strip())
-                  if m and 'sysupgrade' in m.group(2) and want and want in m.group(2):
-                      sha, itb = m.group(1), m.group(2)
-          if itb:
-              data = {
-                  'version': "%s-%s" % (ver.get('device', 'unknown'), ver.get('built', '')),
-                  'device': ver.get('device', ''),
-                  'commit': ver.get('commit', ''),
-                  'built': ver.get('built', ''),
-                  'file': itb,
-                  'sha256': sha,
-                  'notes': 'automated build',
-              }
-              with open(os.path.join(out, 'version.json'), 'w') as f:
-                  json.dump(data, f, ensure_ascii=False)
-              print('version.json:', data['version'])
-          else:
-              print('WARN: no sysupgrade itb found, skip version.json')
-          PY
-          cp "$HOME"/out/version.json artifact/ 2>/dev/null || true
-          # 顺带把更新插件的 .apk 带出来，方便单独安装测试
-          cp "$HOME"/ponwrt/bin/packages/*/luci/luci-app-ponwrt-update*.apk artifact/ 2>/dev/null || true
-          cp "$HOME"/ponwrt/bin/packages/*/packages/curl-*.apk artifact/ 2>/dev/null || true
-          cp "$HOME"/ponwrt/bin/packages/*/packages/jsonfilter-*.apk artifact/ 2>/dev/null || true
-          cp "$HOME"/ponwrt-build-*.log artifact/ 2>/dev/null || true
-          ls -lh artifact/ || true
-
-      - name: 回写 version.json 到仓库
-        if: success()
-        run: |
-          if [ -f "$HOME/out/version.json" ]; then
-            cp "$HOME/out/version.json" ./version.json
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add version.json
-            if ! git diff --cached --quiet; then
-              git commit -m "chore: update version.json [skip ci]"
-              git push || true
-            fi
-          fi
+          mkdir -p artifact/diagnostics
+          if [[ -d "$DIAG_DIR" ]]; then cp -a "$DIAG_DIR/." artifact/diagnostics/; fi
+          if [[ -d "$HOME/out" ]]; then cp -a "$HOME/out/." artifact/; fi
+          printf 'run=%s\ncommit=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > artifact/diagnostics/workflow.txt
+          cp sources.lock.json artifact/diagnostics/
+          if [[ -f "$DIAG_DIR/download.ok" ]]; then echo 'download_complete=true' >> "$GITHUB_OUTPUT"; fi
 
       - name: 上传 Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ponwrt-${{ inputs.device_profile }}-${{ inputs.soc }}
-          path: artifact/*
+          name: ponwrt-${{ inputs.device_profile }}-${{ inputs.soc }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifact/
+          include-hidden-files: true
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
-      - name: 发布 Release
-        if: ${{ inputs.make_release && success() }}
+      - name: 保存已完成下载缓存（编译失败时也保留）
+        if: ${{ !cancelled() && steps.dl.outcome == 'success' && steps.collect.outputs.download_complete == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/ponwrt-dl
+          key: ${{ steps.dl.outputs.cache-primary-key }}
+
+      - name: 保存编译缓存
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' && steps.compile.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/ponwrt-ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
+
+      - name: 发布完整 Release
+        if: ${{ success() && inputs.make_release && !inputs.smoke_only && !inputs.packages_only }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ inputs.device_profile }}-$(date +%Y%m%d-%H%M)"
-          gh release create "$TAG" artifact/*.itb artifact/sha256sums artifact/ponwrt-version artifact/version.json \
-            --title "${{ inputs.device_profile }} $TAG" \
-            --notes "自动构建：ponwrt @ ${{ inputs.pin_commit }}" || true
+          cd artifact
+          sha256sum -c sha256sums
+          TAG="$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')"
+          LATEST=false
+          if [[ "$PONWRT_SOC" == an7581 && "$PONWRT_DEVICE" == nokia_xg-040g-md-ubi ]]; then LATEST=true; fi
+          gh release create "$TAG" ./*.itb ./*.manifest sha256sums ponwrt-version version.json profiles.json \
+            --draft --target "$GITHUB_SHA" --title "$TAG" --notes "ponwrt @ $PONWRT_PIN; run $GITHUB_RUN_ID"
+          gh release edit "$TAG" --draft=false --latest="$LATEST"
+
+      - name: 发布成功后回写正式设备版本
+        if: ${{ success() && inputs.make_release && !inputs.smoke_only && !inputs.packages_only && inputs.soc == 'an7581' && inputs.device_profile == 'nokia_xg-040g-md-ubi' }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git checkout -B metadata-update origin/main
+          cp artifact/version.json version.json
+          git add version.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: publish verified firmware metadata [skip ci]'
+            git push origin HEAD:main
+          fi

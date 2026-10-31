@@ -3,6 +3,8 @@
 本仓库用 GitHub Actions 自动构建 **pbs05/ponwrt** 固件（ImmortalWrt + Airoha AN7581/AN7583 的 PON 支持），
 并叠加了一套通用定制：Aurora 主题、简体中文、常用插件、固定 LAN 网段。
 
+构建维护和故障排查请先阅读 [构建流程与验收记录](BUILDING-zh.md)。2026-10-31 的流程修复已通过本地回归，仍待 GitHub Actions 完整构建验收。
+
 ---
 
 ## 一、固件来源
@@ -28,7 +30,7 @@
 
 ## 三、支持机型
 
-由 `configs/<soc>.config` 决定，当前默认构建 `nokia_xg-040g-md-ubi`（Nokia XG-040G-MD，UBI 布局）。
+由上游 `configs/<soc>.config` 提供可用设备，脚本只保留请求的 profile。默认构建 `nokia_xg-040g-md-ubi`（Nokia XG-040G-MD，UBI 布局）。
 同一份 `an7581` 配置里的其它 profile 也可以直接构建：
 
 | SoC | 设备 profile | 机型 |
@@ -70,21 +72,23 @@
 - `make_release`：需要发 Release 时勾上
 - `smoke_only`：只编到 toolchain + libffi + ucode 就停，用于快速验证（约 50–70 分钟）
 
-构建约 **2–4 小时**（GitHub 托管 runner 是 4 vCPU / 16 GB，完整编工具链 + 内核 + 全部软件包）。
+构建时间取决于 runner、网络与缓存；首次修复后的耗时待实测。仅构建指定设备的镜像，并保留上游的软件包选择。
 
 > 只有勾选 `make_release` 的构建才会发 Release；平时手动触发的构建只上传 **Artifact**（保留 30 天），在运行页面下载。
 
-`dl/` 会被 `actions/cache` 缓存，第二次起省去约 2.5 GB 下载。
+`dl/` 和 ccache 分开缓存；下载完成后即使编译失败也保存下载缓存。源码和 feeds/主题版本通过 commit 与 `sources.lock.json` 固定。
 
 ### 方式 B：本地 / 自己的服务器
 
 ```bash
-sudo ./build-ponwrt.sh          # 自动装依赖、编译、产物放 ~/out
+bash ./build-ponwrt.sh          # 安装依赖时使用 sudo；产物放 ~/out
 # 可选参数：
-PONWRT_SOC=an7581 PONWRT_DEVICE=nokia_xg-040g-md-ubi PONWRT_JOBS=8 ./build-ponwrt.sh
+PONWRT_SOC=an7581 PONWRT_DEVICE=nokia_xg-040g-md-ubi PONWRT_JOBS=8 bash ./build-ponwrt.sh
 ```
 
 要求：Ubuntu 22.04/24.04 x86_64、≥4 核、≥8 GB 内存、≥40 GB 磁盘（首次全量约 20–25 GB）。
+
+每次使用新的 `SRC_DIR`、空 `OUT_DIR` 和空 `DIAG_DIR`，避免历史构建污染；可复用外部下载缓存与 ccache。诊断默认放 `~/ponwrt-diagnostics`。
 
 ### 方式 C：Docker（FreeBSD/TrueNAS 等不方便装依赖的环境）
 
@@ -156,14 +160,16 @@ LuCI（`http://10.0.0.1`）→ 网络 → PON：
 | 项目 | 说明 |
 |---|---|
 | 当前版本 | 显示设备型号与编译时间（来自 `/etc/ponwrt-version`） |
-| 最新版本 | 从本仓库的 `version.json` 读取最新构建 |
+| 最新版本 | 从本仓库的 `version.json` 读取已发布的正式设备版本 |
 | 状态 | 发现新版本 / 已是最新 / 检查失败（附原因） |
 | GitHub 代理 | 国内访问 GitHub 不稳时可填代理，如 `http://10.0.0.5:7897` |
 | 立即检查 | 手动刷新版本信息 |
-| 下载并刷写 | 下载最新固件 → **校验 SHA256** → 调 `sysupgrade`（保留配置） |
+| 下载并刷写 | 核对机型 → 下载固定 Release 固件 → **校验 SHA256** → `sysupgrade -T` → 刷写（保留配置） |
 | 设置代理 | 保存代理地址到 `/etc/ponwrt-update.proxy` |
 
 版本信息来源优先 `raw.githubusercontent.com/<repo>/main/version.json`，失败时回退到 Release 资产；配置代理时先走代理、失败再直连。
+
+普通构建仅上传 Artifact；正式设备 Release 发布成功后才更新 main/version.json。其它机型不会替换正式设备 latest。插件包提供后端和 ACL，页面仍集成在原“备份/升级”入口。
 
 ## 八、路线图
 
