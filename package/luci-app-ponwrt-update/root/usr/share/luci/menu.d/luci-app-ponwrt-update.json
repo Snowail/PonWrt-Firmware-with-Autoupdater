@@ -1,6 +1,6 @@
 {
 	"admin/system/ponwrt-update": {
-		"title": "Firmware update",
+		"title": "固件更新",
 		"order": 71,
 		"action": {
 			"type": "view",
