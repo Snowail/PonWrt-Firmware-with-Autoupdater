@@ -74,7 +74,7 @@ return view.extend({
 			fs.trimmed('/proc/mounts')
 		];
 
-						tasks.push(fs.exec('/usr/bin/ponwrt-update-check', [ '--json' ]).catch(function () { return { code: 1, stdout: '{}' }; }));
+								tasks.push(fs.exec('/usr/bin/ponwrt-update-check', [ '--json' ]).catch(function () { return { code: 1, stdout: '{}' }; }));
 		return Promise.all(tasks);
 	},
 
@@ -384,58 +384,67 @@ return view.extend({
 		m.tabbed = true;
 		m.readonly = isReadonlyView;
 /* ponwrt updater ==== 由 tools/patch-flash.py 注入，勿手改 ==== */
-mapdata.pu = mapdata.pu || {};
-const PU = (function () { try { return JSON.parse((pu && pu.stdout) || '{}'); } catch (e) { return {}; } })();
-s = m.section(form.NamedSection, 'pu', 'pu', '固件更新', '检查本仓库的最新发布，或直接下载并刷写');
-o = s.option(form.DummyValue, 'pu_cur', '当前版本');
-o.cfgvalue = function () { return (PU.device || '未知') + ' / ' + (PU.cur_built || '未知'); };
-o = s.option(form.DummyValue, 'pu_latest', '最新版本');
-o.cfgvalue = function () { return PU.latest || '-'; };
-o = s.option(form.DummyValue, 'pu_state', '状态');
-o.cfgvalue = function () {
-	if (PU.error) return '检查失败：' + PU.error;
-	return PU.update ? '发现新版本' : '已是最新';
-};
-o = s.option(form.DummyValue, 'pu_proxy_cur', 'GitHub 代理');
-o.cfgvalue = function () { return PU.proxy || '直连'; };
-o = s.option(form.Button, 'pu_check', '检查更新');
-o.inputstyle = 'action'; o.inputtitle = '立即检查';
-o.onclick = function () {
-	ui.showModal('正在检查…', [ E('p', { 'class': 'spinning' }, '') ]);
-	return fs.exec('/usr/bin/ponwrt-update-check', [ '--json' ]).then(function (r) {
-		ui.hideModal();
-		ui.addNotification(null, E('pre', {}, r.stdout || ''), 'info');
-	});
-};
-o = s.option(form.Button, 'pu_flash', '刷写固件');
-o.inputstyle = 'negative important'; o.inputtitle = '下载并刷写';
-o.onclick = function () {
-	if (!confirm('将下载最新固件并立即刷写，期间不要断电。继续？')) return;
-	ui.showModal('正在下载…', [ E('p', { 'class': 'spinning' }, '') ]);
-	return fs.exec('/usr/bin/ponwrt-update-check', [ '--flash' ]).then(function (r) {
-		ui.hideModal();
-		ui.addNotification(null, E('pre', {}, (r.stdout || '') + (r.stderr || '')), 'info');
-	});
-};
-o = s.option(form.Button, 'pu_proxy', '代理设置');
-o.inputstyle = 'action'; o.inputtitle = '设置代理';
-o.onclick = function () {
-	var inp = E('input', { 'type': 'text', 'style': 'width:100%',
-		'placeholder': 'http://10.0.0.5:7897', 'value': PU.proxy || '' });
-	ui.showModal('GitHub 代理', [
-		E('p', {}, '留空表示直连。例如：http://10.0.0.5:7897'),
-		inp,
-		E('div', { 'class': 'right' }, [
-			E('button', { 'class': 'btn', 'click': ui.hideModal }, [ '取消' ]),
-			' ',
-			E('button', { 'class': 'btn cbi-button-action important', 'click': function () {
-				return fs.write('/etc/ponwrt-update.proxy', inp.value.trim() + '\n')
-					.then(function () { ui.hideModal(); window.location.reload(); });
-			} }, [ '保存' ])
-		])
+var PU = (function () { try { return JSON.parse((pu && pu.stdout) || '{}'); } catch (e) { return {}; } })();
+var _ponwrtOrigRender = m.render.bind(m);
+m.render = function () {
+	var cells = [
+		[ '当前版本', (PU.device || '未知') + ' / ' + (PU.cur_built || '未知') ],
+		[ '最新版本', PU.latest || '-' ],
+		[ '状态', PU.error ? ('检查失败：' + PU.error) : (PU.update ? '发现新版本' : '已是最新') ],
+		[ 'GitHub 代理', PU.proxy || '直连' ]
+	];
+	var btnCheck = E('button', { 'class': 'cbi-button cbi-button-action', 'click': function () {
+		ui.showModal('正在检查…', [ E('p', { 'class': 'spinning' }, '') ]);
+		return fs.exec('/usr/bin/ponwrt-update-check', [ '--json' ]).then(function (r) {
+			ui.hideModal();
+			ui.addNotification(null, E('pre', {}, r.stdout || ''), 'info');
+		});
+	} }, [ '立即检查' ]);
+	var btnFlash = E('button', { 'class': 'cbi-button cbi-button-negative', 'style': 'margin-left:.5em', 'click': function () {
+		if (!confirm('将下载最新固件并立即刷写，期间不要断电。继续？')) return;
+		ui.showModal('正在下载…', [ E('p', { 'class': 'spinning' }, '') ]);
+		return fs.exec('/usr/bin/ponwrt-update-check', [ '--flash' ]).then(function (r) {
+			ui.hideModal();
+			ui.addNotification(null, E('pre', {}, (r.stdout || '') + (r.stderr || '')), 'info');
+		});
+	} }, [ '下载并刷写' ]);
+	var btnProxy = E('button', { 'class': 'cbi-button', 'style': 'margin-left:.5em', 'click': function () {
+		var inp = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'style': 'width:100%',
+			'placeholder': 'http://10.0.0.5:7897', 'value': PU.proxy || '' });
+		ui.showModal('GitHub 代理', [
+			E('p', {}, '留空表示直连。例如：http://10.0.0.5:7897'),
+			inp,
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, [ '取消' ]),
+				' ',
+				E('button', { 'class': 'btn cbi-button-action important', 'click': function () {
+					return fs.write('/etc/ponwrt-update.proxy', inp.value.trim() + '\n')
+						.then(function () { ui.hideModal(); window.location.reload(); });
+				} }, [ '保存' ])
+			])
+		]);
+	} }, [ '设置代理' ]);
+	var box = E('div', { 'class': 'cbi-section', 'id': 'ponwrt-update' }, [
+		E('h3', {}, '固件更新'),
+		E('div', { 'class': 'cbi-section-descr' }, '检查本仓库的最新发布，或直接下载并刷写'),
+		E('table', { 'class': 'table' }, cells.map(function (c) {
+			return E('tr', { 'class': 'tr' }, [
+				E('td', { 'class': 'td', 'width': '33%' }, c[0]),
+				E('td', { 'class': 'td' }, c[1])
+			]);
+		})),
+		E('div', { 'class': 'cbi-page-actions', 'style': 'margin-top:1em' }, [ btnCheck, btnFlash, btnProxy ])
 	]);
+	var attach = function (node) {
+		if (node && node.appendChild)
+			node.appendChild(box);
+		return node;
+	};
+	var r = _ponwrtOrigRender();
+	return (r && typeof r.then === 'function') ? r.then(attach) : attach(r);
 };
 /* ponwrt updater ==== end ==== */
+
 
 
 
