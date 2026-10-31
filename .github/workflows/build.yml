@@ -36,6 +36,11 @@ on:
         required: false
         default: false
         type: boolean
+      packages_only:
+        description: '只编译更新插件的三个 .apk（curl / jsonfilter / luci-app-ponwrt-update），不出镜像'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -77,6 +82,7 @@ jobs:
           PONWRT_PIN: ${{ inputs.pin_commit }}
           PONWRT_JOBS: ${{ inputs.jobs }}
           PONWRT_SMOKE: ${{ inputs.smoke_only && '1' || '0' }}
+          PONWRT_PKGS: ${{ inputs.packages_only && '1' || '0' }}
           PONWRT_DL: /home/runner/ponwrt-dl
           FORCE: '1'
         run: |
