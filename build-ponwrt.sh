@@ -50,6 +50,7 @@ EXTRA_PACKAGES=(
   "CONFIG_PACKAGE_iperf3=y"
   "CONFIG_PACKAGE_luci-app-nlbwmon=y"       # 设备列表 / 按设备流量
   "CONFIG_PACKAGE_curl=y"                    # 更新检查需要（支持代理）
+  "CONFIG_PACKAGE_luci-app-ponwrt-update=y"  # 系统 → 固件更新（独立页面）
 )
 
 exec > >(tee -a "$LOG") 2>&1
@@ -116,20 +117,15 @@ if [ ! -f package/luci-theme-aurora/Makefile ]; then
   rm -rf package/luci-theme-aurora/.git
 fi
 
-say "[3d/7] 注入 overlay（更新检查脚本 + ACL）并给备份/升级页打补丁"
-mkdir -p files
-[ -d "$REPO_DIR/overlay" ] && cp -a "$REPO_DIR/overlay/." files/
-chmod +x files/usr/bin/ponwrt-update-check 2>/dev/null || true
-
-FLASH_JS="feeds/luci/modules/luci-mod-system/htdocs/luci-static/resources/view/system/flash.js"
-if [ -f "$FLASH_JS" ]; then
-  python3 "$REPO_DIR/tools/patch-flash.py" "$FLASH_JS"
-  if command -v node >/dev/null 2>&1; then
-    node --check "$FLASH_JS" && echo "  OK   flash.js 语法检查通过"
-  fi
-else
-  echo "  !! 未找到 $FLASH_JS，跳过补丁"
-fi
+say "[3d/7] 组装 luci-app-ponwrt-update（独立页面：系统 → 固件更新）"
+PKG="package/luci-app-ponwrt-update"
+cp -a "$REPO_DIR/package/luci-app-ponwrt-update/." package/
+mkdir -p "$PKG/root/usr/bin" "$PKG/root/usr/share/rpcd/acl.d"
+cp -a "$REPO_DIR/overlay/usr/bin/ponwrt-update-check" "$PKG/root/usr/bin/"
+cp -a "$REPO_DIR/overlay/usr/share/rpcd/acl.d/luci-app-ponwrt-update.json" \
+      "$PKG/root/usr/share/rpcd/acl.d/"
+chmod +x "$PKG/root/usr/bin/ponwrt-update-check"
+echo "  OK   $PKG 就绪"
 
 # 双保险：libffi 3.4.7 自带 PKG_BUILD_PARALLEL:=1，其 make -j 也可能出问题
 say "[3c/7] 关闭 libffi 的并行编译"
