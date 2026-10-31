@@ -1,0 +1,13 @@
+{
+	"admin/system/ponwrt-update": {
+		"title": "Firmware update",
+		"order": 71,
+		"action": {
+			"type": "view",
+			"path": "ponwrt/update"
+		},
+		"depends": {
+			"acl": [ "luci-app-ponwrt-update" ]
+		}
+	}
+}
