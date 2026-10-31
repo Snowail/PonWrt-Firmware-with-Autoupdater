@@ -149,10 +149,26 @@ LuCI（`http://10.0.0.1`）→ 网络 → PON：
 - `sysupgrade` 会保留 `/etc/config`（PON、PPPoE、静态租约、ZeroTier 身份等）
 - 镜像里的 `uci-defaults` 只设置主题/语言/LAN 网段，不涉及 PON 与 PPPoE
 
+### 在线更新检查
+
+「系统 → 备份/升级 → 操作」页面最下方新增 **在线更新检查** 面板：
+
+| 项目 | 说明 |
+|---|---|
+| 当前版本 | 显示设备型号与编译时间（来自 `/etc/ponwrt-version`） |
+| 最新版本 | 从本仓库的 `version.json` 读取最新构建 |
+| 状态 | 发现新版本 / 已是最新 / 检查失败（附原因） |
+| GitHub 代理 | 国内访问 GitHub 不稳时可填代理，如 `http://10.0.0.5:7897` |
+| 立即检查 | 手动刷新版本信息 |
+| 下载并刷写 | 下载最新固件 → **校验 SHA256** → 调 `sysupgrade`（保留配置） |
+| 设置代理 | 保存代理地址到 `/etc/ponwrt-update.proxy` |
+
+版本信息来源优先 `raw.githubusercontent.com/<repo>/main/version.json`，失败时回退到 Release 资产；配置代理时先走代理、失败再直连。
+
 ## 八、路线图
 
-- [ ] 固件内「系统 → 固件更新」页面：定时检查本仓库 Release，登录 LuCI 后提示新版本
-- [ ] Release 自动附带 `version.json` 与 `sha256sums`，支持一键校验下载
+- [x] 固件内「系统 → 备份/升级 → 操作」的在线更新检查面板
+- [x] Release 自动附带 `version.json` 与 `sha256sums`，支持一键校验下载
 - [ ] 多机型矩阵构建（一次触发编多个 profile）
 
 ## 九、致谢与许可
