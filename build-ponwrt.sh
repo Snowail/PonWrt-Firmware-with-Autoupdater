@@ -24,8 +24,9 @@ PIN="${PONWRT_PIN:-${PIN_COMMIT:-03c134544714617e196dd399c85ebb90fb6eefa1}}"
 NJOBS="${PONWRT_JOBS:-${JOBS:-}}"
 SMOKE_MODE="${PONWRT_SMOKE:-${SMOKE:-0}}"
 DL_DIR="${PONWRT_DL:-}"
-unset TARGET DEVICE JOBS PIN_COMMIT SMOKE FORCE \
-      PONWRT_SOC PONWRT_DEVICE PONWRT_PIN PONWRT_JOBS PONWRT_SMOKE PONWRT_DL
+PKG_ONLY="${PONWRT_PKGS:-${PACKAGES_ONLY:-0}}"
+unset TARGET DEVICE JOBS PIN_COMMIT SMOKE FORCE PACKAGES_ONLY \
+      PONWRT_SOC PONWRT_DEVICE PONWRT_PIN PONWRT_JOBS PONWRT_SMOKE PONWRT_DL PONWRT_PKGS
 
 REPO_URL="${REPO_URL:-https://github.com/pbs05/ponwrt.git}"
 SRC_DIR="${SRC_DIR:-$HOME/ponwrt}"
@@ -189,6 +190,20 @@ say "[5/7] 预下载源码包"
 make download -j4 || make download -j1 V=s
 
 # ============================================================ 6. 编译
+# 仅编译更新插件相关的三个包（给已刷旧固件的机器单独安装用）
+if [ "${PKG_ONLY}" = "1" ]; then
+  say "[6/7] PACKAGES_ONLY=1：只编 luci-app-ponwrt-update / curl / jsonfilter"
+  make -j"${NJOBS}" toolchain/compile
+  make -j"${NJOBS}" package/luci-app-ponwrt-update/compile package/curl/compile package/jsonfilter/compile
+  mkdir -p "$OUT_DIR"
+  cp bin/packages/*/luci/luci-app-ponwrt-update*.apk "$OUT_DIR"/ 2>/dev/null || true
+  cp bin/packages/*/packages/curl-*.apk "$OUT_DIR"/ 2>/dev/null || true
+  cp bin/packages/*/packages/jsonfilter-*.apk "$OUT_DIR"/ 2>/dev/null || true
+  ls -lh "$OUT_DIR"
+  say "打包完成"
+  exit 0
+fi
+
 if [ "${SMOKE_MODE}" = "1" ]; then
   say "[6/7] SMOKE=1：只验证 toolchain + libffi + ucode"
   make -j"${NJOBS}" toolchain/compile
