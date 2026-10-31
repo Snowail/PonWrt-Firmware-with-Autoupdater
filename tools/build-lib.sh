@@ -1,5 +1,20 @@
 #!/usr/bin/env bash
 # Explicit checks also work when the caller invokes these functions inside `if`.
+preserve_failed_outputs() {
+  # Keep unverified images away from the validated OUT_DIR and Release globs.
+  [ -f "$DIAG_DIR/compile.ok" ] || return 0
+  local binary="$SRC_DIR/bin/targets/airoha/$SOC" file
+  mkdir -p "$DIAG_DIR/unverified-images"
+  for file in "$binary"/*.itb "$binary"/*.manifest "$binary/profiles.json" "$binary/sha256sums"; do
+    if [ -f "$file" ]; then cp "$file" "$DIAG_DIR/unverified-images/" || return; fi
+  done
+  if [ -f "$SRC_DIR/files/etc/ponwrt-version" ]; then
+    cp "$SRC_DIR/files/etc/ponwrt-version" "$DIAG_DIR/unverified-images/"
+  fi
+  printf '%s\n' 'Collection or validation failed. These images are diagnostic evidence, not approved firmware.' \
+    > "$DIAG_DIR/unverified-images/README.txt"
+}
+
 logged_make() {
   local name="$1"
   shift

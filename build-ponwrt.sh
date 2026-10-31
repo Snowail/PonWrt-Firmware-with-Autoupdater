@@ -71,6 +71,7 @@ collect_diagnostics() {
   trap - EXIT
   set +e
   printf '%s\n' "$rc" > "$DIAG_DIR/build-exit-code"
+  if (( rc != 0 )); then preserve_failed_outputs; fi
   { df -h; free -h; } > "$DIAG_DIR/resources.txt" 2>&1
   dmesg --ctime > "$DIAG_DIR/kernel-messages.txt" 2>&1
   if [ -d "$SRC_DIR" ]; then
@@ -277,6 +278,7 @@ fi
 
 say "[6/7] 编译（-j${NJOBS}）"
 run_make world
+touch "$DIAG_DIR/compile.ok"
 
 # ============================================================ 7. 产物
 say "[7/7] 收集产物"

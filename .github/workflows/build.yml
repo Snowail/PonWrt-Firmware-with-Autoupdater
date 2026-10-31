@@ -128,6 +128,7 @@ jobs:
           printf 'run=%s\ncommit=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > artifact/diagnostics/workflow.txt
           cp sources.lock.json artifact/diagnostics/
           if [[ -f "$DIAG_DIR/download.ok" ]]; then echo 'download_complete=true' >> "$GITHUB_OUTPUT"; fi
+          if [[ -f "$DIAG_DIR/compile.ok" ]]; then echo 'compile_complete=true' >> "$GITHUB_OUTPUT"; fi
 
       - name: 上传 Artifact
         if: always()
@@ -147,7 +148,7 @@ jobs:
           key: ${{ steps.dl.outputs.cache-primary-key }}
 
       - name: 保存编译缓存
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' && steps.compile.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' && (steps.compile.outcome == 'success' || steps.collect.outputs.compile_complete == 'true') }}
         uses: actions/cache/save@v4
         with:
           path: ~/ponwrt-ccache

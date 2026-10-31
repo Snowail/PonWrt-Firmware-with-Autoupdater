@@ -77,6 +77,40 @@ class ArtifactTests(unittest.TestCase):
             expected, name = line.split("  ")
             self.assertEqual(expected, hashlib.sha256((self.out / name).read_bytes()).hexdigest())
 
+    def test_target_manifest_layout_from_run16(self):
+        # The pinned upstream's Image/Manifest writes this target-level name.
+        target_manifest = self.binary / "ponwrt-airoha-an7581.manifest"
+        (self.binary / f"{PREFIX}.manifest").rename(target_manifest)
+        self.build()
+        self.assertTrue((self.out / target_manifest.name).is_file())
+
+    def test_target_manifest_rejects_multiple_profiles(self):
+        (self.binary / f"{PREFIX}.manifest").rename(self.binary / "ponwrt-airoha-an7581.manifest")
+        path = self.binary / "profiles.json"
+        data = json.loads(path.read_text())
+        data["profiles"][DEVICE + "-usb-sfp"] = data["profiles"][DEVICE]
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "exactly one device"):
+            self.build()
+        self.assertFalse(self.out.exists())
+
+    def test_target_manifest_still_requires_plugin(self):
+        (self.binary / f"{PREFIX}.manifest").unlink()
+        (self.binary / "ponwrt-airoha-an7581.manifest").write_text("curl - 1.0\n")
+        with self.assertRaisesRegex(ValueError, "Missing image packages"):
+            self.build()
+
+    def test_device_manifest_takes_precedence(self):
+        (self.binary / "ponwrt-airoha-an7581.manifest").write_text("curl - 1.0\n")
+        self.build()
+        self.assertTrue((self.out / f"{PREFIX}.manifest").is_file())
+        self.assertFalse((self.out / "ponwrt-airoha-an7581.manifest").exists())
+
+    def test_missing_manifests_rejected(self):
+        (self.binary / f"{PREFIX}.manifest").unlink()
+        with self.assertRaisesRegex(ValueError, "Missing package manifest"):
+            self.build()
+
     def test_similar_device_cannot_substitute(self):
         p = self.binary / f"{PREFIX}-squashfs-sysupgrade.itb"
         p.rename(self.binary / f"{PREFIX}-usb-sfp-squashfs-sysupgrade.itb")

@@ -43,3 +43,19 @@ else
 fi
 unset -f tee
 echo 'PASS: target/linux, unknown error, package error, exit code, no clean, tee failure'
+
+SRC_DIR="$TMP_TEST/source"
+SOC=an7581
+mkdir -p "$SRC_DIR/bin/targets/airoha/$SOC"
+printf image > "$SRC_DIR/bin/targets/airoha/$SOC/example.itb"
+printf manifest > "$SRC_DIR/bin/targets/airoha/$SOC/example.manifest"
+printf unrelated > "$SRC_DIR/bin/targets/airoha/$SOC/other.txt"
+preserve_failed_outputs
+[[ ! -d "$DIAG_DIR/unverified-images" ]]
+touch "$DIAG_DIR/compile.ok"
+preserve_failed_outputs
+cmp "$SRC_DIR/bin/targets/airoha/$SOC/example.itb" "$DIAG_DIR/unverified-images/example.itb"
+[[ -f "$DIAG_DIR/unverified-images/example.manifest" ]]
+[[ -f "$DIAG_DIR/unverified-images/README.txt" ]]
+[[ ! -f "$DIAG_DIR/unverified-images/other.txt" ]]
+echo 'PASS: failed collection preserves completed images as unverified diagnostics'

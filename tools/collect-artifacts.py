@@ -42,13 +42,21 @@ def collect(mode, source, output, soc, device):
                 raise ValueError(f"Missing image: {path.name}")
             if checksums.get(path.name) != digest(path):
                 raise ValueError(f"SHA256 mismatch: {path.name}")
+        profiles = json.loads((binary / "profiles.json").read_text())
+        profile = profiles["profiles"][device]
         manifest = binary / f"{prefix}.manifest"
+        if not manifest.is_file():
+            # Multi-profile OpenWrt writes IMG_PREFIX.manifest without a device
+            # suffix. Only accept it when this build contains exactly our device.
+            if set(profiles["profiles"]) != {device}:
+                raise ValueError("Target-level manifest requires exactly one device profile")
+            manifest = binary / f"ponwrt-airoha-{soc}.manifest"
+        if not manifest.is_file():
+            raise ValueError(f"Missing package manifest: {manifest.name}")
         packages = {line.split()[0] for line in manifest.read_text().splitlines() if line.strip()}
         required = {"luci-app-ponwrt-update", "curl", "jsonfilter", "ca-bundle", "luci-mod-system"}
         if required - packages:
             raise ValueError(f"Missing image packages: {sorted(required - packages)}")
-        profiles = json.loads((binary / "profiles.json").read_text())
-        profile = profiles["profiles"][device]
         advertised = {image["name"]: image["sha256"] for image in profile["images"]}
         for path in images:
             if advertised.get(path.name) != digest(path):

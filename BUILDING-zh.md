@@ -1,6 +1,16 @@
 # PonWrt 构建流程与本次验收记录
 
-更新时间：2026-10-31（Asia/Shanghai）。本次以工作区的 `PonWrt_Codex_交接文档.md` 为优先依据。
+更新时间：2026-11-01（Asia/Shanghai）。本次以工作区的 `PonWrt_Codex_交接文档.md` 为优先依据。
+
+## Run #16 的实际结果与修复
+
+[Run #16](https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/actions/runs/41206201070) 已完成内核编译及 sysupgrade/recovery 镜像生成，make world 返回成功。失败点为 `[7/7] 收集产物`：脚本错误地要求 `ponwrt-airoha-an7581-nokia_xg-040g-md-ubi.manifest`，而该上游配置实际生成 `ponwrt-airoha-an7581.manifest`，导致 FileNotFoundError。
+
+这属于新增产物校验中的文件名假设错误。现优先使用设备级清单；不存在时，只有 profiles.json 恰好包含请求设备一个 profile 才接受目标级清单。插件、镜像哈希、设备及元数据校验继续保留。回归已先复现旧错误，再验证修复及多机型/缺失插件等拒绝路径。
+
+同时添加 `compile.ok` 标记：make world 成功后即记录，后续收集失败仍保存 ccache；生成的镜像和清单放进诊断目录 `unverified-images/`，不进入通过校验的发布目录。Run #16 原 Artifact 未保存镜像，无法从那个运行恢复固件，需重新完整构建。其下载缓存已成功保存。
+
+Run #16 中三组 Kconfig 循环依赖仍出现，但此次没有阻止所选配置编译完成；原 Run #15 的内核失败仍不能仅凭这次成功断言唯一根因。
 
 ## 当前状态
 
@@ -80,4 +90,4 @@ bash -n build-ponwrt.sh
 actionlint .github/workflows/build.yml
 ```
 
-已通过 13 项 Python 回归、ShellCheck 0.11.0 和带 ShellCheck 的 actionlint 1.7.12；make 模拟测试覆盖内核/包/未知错误、详细重试、最终退出码、禁止 clean 与 tee 失败；更新模拟测试覆盖机型、固定下载 URL、回退版本阻止及 sysupgrade 预检。另已对锁定 LuCI 的真实 flash.js 打补丁并通过 `node --check`，对真实 an7581 配置验证只保留目标设备。以上均不等价于 Linux 完整编译或硬件验证。
+已通过 18 项 Python 回归、ShellCheck 0.11.0 和带 ShellCheck 的 actionlint 1.7.12；make 模拟测试覆盖内核/包/未知错误、详细重试、最终退出码、禁止 clean、tee 失败及失败收集时的镜像保留；更新模拟测试覆盖机型、固定下载 URL、回退版本阻止及 sysupgrade 预检。另已对锁定 LuCI 的真实 flash.js 打补丁并通过 `node --check`，对真实 an7581 配置验证只保留目标设备。Run #16 已验证 Linux 编译和镜像生成，新收集流程仍待 Actions 完整验收；未进行硬件验证。
