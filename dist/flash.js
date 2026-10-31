@@ -425,7 +425,7 @@ m.render = function () {
 		]);
 	} }, [ '设置代理' ]);
 	var box = E('div', { 'class': 'cbi-section', 'id': 'ponwrt-update' }, [
-		E('h3', {}, '固件更新'),
+		E('h3', {}, '在线更新检查'),
 		E('div', { 'class': 'cbi-section-descr' }, '检查本仓库的最新发布，或直接下载并刷写'),
 		E('table', { 'class': 'table' }, cells.map(function (c) {
 			return E('tr', { 'class': 'tr' }, [
