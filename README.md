@@ -19,7 +19,7 @@
 
 > ⚠️ 这是**第三方自编译固件**，与 Nokia、运营商、pbs05 均无隶属关系。风险自负。
 
-## 二、镜像包含什么
+## 二、公版构建配置
 
 - **LuCI 简体中文** + **Aurora 主题**（首次启动自动设为默认主题与中文）
 - **默认 LAN：`10.0.0.1/24`**，DHCP 池 `10.0.0.100–10.0.0.249`
@@ -39,20 +39,11 @@
 
 全新安装默认关闭 AdGuard Home、OpenClash、SmartDNS、Lucky 和 UPnP。由用户在 LuCI 中选择是否启用。保留配置升级时沿用已保存的服务设置。完整固件的实际依赖与版本见该次 Release 附带的 `.manifest`。
 
-## 三、支持机型
+## 三、已验证机型与构建方式
 
-由上游 `configs/<soc>.config` 提供可用设备，脚本只保留请求的 profile。默认构建 `nokia_xg-040g-md-ubi`（Nokia XG-040G-MD，UBI 布局）。
-同一份 `an7581` 配置里的其它 profile 也可以直接构建：
+本仓库已在 Nokia XG-040G-MD（AN7581、UBI 布局）上运行 #17 固件，并在该机上验证了新版 LuCI 页面及在线版本检查。对应的设备 profile 为 `nokia_xg-040g-md-ubi`。
 
-| SoC | 设备 profile | 机型 |
-| --- | --- | --- |
-| an7581 | `nokia_xg-040g-md-ubi` | Nokia XG-040G-MD（UBI） |
-| an7581 | `nokia_xg-040g-md-ubi-usb-sfp` | XG-040G-MD + USB/SFP 变体 |
-| an7581 | `nokia_xg-040g-tf-ubi` | Nokia XG-040G-TF（安全启动，需配套 TF 引导） |
-| an7581 | `gemtek_xg2010g` / `znxt_zn504xg-d` / `znxt_zn515xg-d` / `unionman_ung00a` / `fiberhome_hg5382a` 等 | 其它 AN7581 机型 |
-| an7583 | `nokia_xg-040g-mf-ubi` | Nokia XG-040G-MF |
-
-> 机型与引导器必须匹配。TF 机型有安全启动，不能混用 MD 的引导文件。
+Actions 每次按一个 SoC 和一个设备 profile 构建。上游配置还列有其他设备，本项目的实机验证范围目前限于上述型号。
 
 ## 四、获取与构建
 
@@ -62,7 +53,7 @@
 
 | 名称 | 含义 |
 | --- | --- |
-| Release tag：`<device_profile>-<YYYYMMDD-HHMM>` | 例：`nokia_xg-040g-md-ubi-20261030-2105` |
+| Release tag：`<device_profile>-<YYYYMMDD-HHMMSS>-<run_id>-<attempt>` | 设备、UTC 构建时间、Actions 运行 ID 和尝试次数 |
 | Release 标题：`<device_profile> <tag>` | 同一 tag |
 | `ponwrt-airoha-<soc>-<device_profile>-squashfs-sysupgrade.itb` | **正式固件**，U-Boot「日常刷机」用 |
 | `ponwrt-airoha-<soc>-<device_profile>-initramfs-recovery.itb` | **试跑固件**，U-Boot「试跑固件」用 |
@@ -83,7 +74,7 @@
 - `make_release`：需要发 Release 时勾上
 - `smoke_only`：只编到 toolchain + libffi + ucode 就停，用于快速验证（约 50–70 分钟）
 
-构建时间取决于 runner、网络与缓存；首次修复后的耗时待实测。仅构建指定设备的镜像，并保留上游的软件包选择。
+构建时间取决于 runner、网络与缓存；完整构建 #17 约耗时 103 分钟。仅构建指定设备的镜像，并保留上游的软件包选择。
 
 > 只有勾选 `make_release` 的构建才会发 Release；平时手动触发的构建只上传 **Artifact**（保留 30 天），在运行页面下载。
 
@@ -160,7 +151,7 @@ LuCI（`http://10.0.0.1`）→ 网络 → PON：
 
 ## 七、升级
 
-- 日常升级用 LuCI「系统 → 备份/升级 → 刷写新固件」，或 `sysupgrade -n <itb>`
+- 日常升级用 LuCI「系统 → 备份/升级 → 刷写新固件」，或 `sysupgrade <itb>`
 - `sysupgrade` 会保留 `/etc/config`（PON、PPPoE、静态租约、ZeroTier 身份等）
 - 镜像里的 `uci-defaults` 只设置主题/语言/LAN 网段，不涉及 PON 与 PPPoE
 
@@ -185,11 +176,12 @@ LuCI（`http://10.0.0.1`）→ 网络 → PON：
 
 普通构建仅上传 Artifact；正式设备 Release 发布成功后才更新 main/version.json。其它机型不会替换正式设备 latest。插件包提供后端和 ACL，页面仍集成在原“备份/升级”入口。
 
-## 八、路线图
+## 八、已完成的工作
 
-- [x] 固件内「系统 → 备份/升级 → 操作」的在线更新检查面板
-- [x] Release 自动附带 `version.json` 与 `sha256sums`，支持一键校验下载
-- [ ] 多机型矩阵构建（一次触发编多个 profile）
+- 单机型构建已生成 sysupgrade、recovery、软件包清单和 SHA-256 校验文件。[查看 #17 构建](https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/actions/runs/41230731864)
+- 页面快速测试通道可单独安装和回滚 LuCI 升级页，已有固件可以直接验证页面改动。[安装与回滚说明](fast-ui/README.md)
+- 更新后端支持手动检查、定时检查和登录提醒。测试机已成功查询正式发布版本。
+- 公版软件包清单已接入完整构建。上方表格列出构建选择；已发布镜像的实际软件包以该版 Release 的 manifest 为准。[公版首次 Release 构建记录](https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/actions/runs/41294150019)
 
 ## 九、致谢与许可
 
