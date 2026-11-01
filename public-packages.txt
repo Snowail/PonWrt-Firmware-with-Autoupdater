@@ -16,7 +16,7 @@ sqm-scripts
 luci-app-filemanager
 openssh-sftp-server
 luci-app-statistics
-luci-app-tailscale
+luci-app-tailscale-community
 tailscale
 luci-app-frpc
 frpc
@@ -25,5 +25,5 @@ smartdns
 luci-app-samba4
 samba4-server
 bind-dig
-ethtool
+ethtool-full
 htop

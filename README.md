@@ -32,10 +32,10 @@
 | DNS | `adguardhome`、`luci-app-adguardhome`、`smartdns`、`luci-app-smartdns` |
 | 分流与公网服务 | `luci-app-openclash` 和 Mihomo ARM64 v1.19.33 核心、`lucky`、`luci-app-lucky`、`frpc`、`luci-app-frpc` |
 | 域名、唤醒与 NAT | `luci-app-ddns`、`ddns-scripts`、`ddns-scripts-services`、`luci-app-wol`、`luci-app-upnp`、`miniupnpd-nftables` |
-| 远程组网 | `zerotier`、`luci-app-zerotier`、`tailscale`、`luci-app-tailscale`、`wireguard-tools`、`kmod-wireguard`、`luci-proto-wireguard` |
+| 远程组网 | `zerotier`、`luci-app-zerotier`、`tailscale`、`luci-app-tailscale-community`、`wireguard-tools`、`kmod-wireguard`、`luci-proto-wireguard` |
 | 带宽与监控 | `sqm-scripts`、`luci-app-sqm`、`luci-app-statistics`（collectd 系统和接口曲线）、`nlbwmon`、`luci-app-nlbwmon`（按终端统计） |
 | 文件与共享 | `luci-app-filemanager`、`openssh-sftp-server`、`samba4-server`、`luci-app-samba4` |
-| 诊断 | `iperf3`、`bind-dig`、`ethtool`、`htop` |
+| 诊断 | `iperf3`、`bind-dig`、`ethtool-full`、`htop` |
 
 全新安装默认关闭 AdGuard Home、OpenClash、SmartDNS、Lucky 和 UPnP。由用户在 LuCI 中选择是否启用。保留配置升级时沿用已保存的服务设置。完整固件的实际依赖与版本见该次 Release 附带的 `.manifest`。
 
