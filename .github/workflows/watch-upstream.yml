@@ -1,0 +1,49 @@
+name: Check upstream PonWrt
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: ponwrt-upstream-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: 比较上游默认分支并按需触发完整构建
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pin=$(git ls-remote --exit-code https://github.com/pbs05/ponwrt.git HEAD | cut -f1)
+          [[ "$pin" =~ ^[0-9a-f]{40}$ ]]
+          published=$(gh api -H 'Accept: application/vnd.github.raw+json' \
+            "repos/$GH_REPO/contents/version.json?ref=main" | jq -er .commit)
+          if [[ "$pin" == "$published" ]]; then
+            echo "上游与当前正式版一致：$pin" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          device=nokia_xg-040g-md-ubi
+          runs=$(gh api --paginate "repos/$GH_REPO/actions/workflows/build.yml/runs?branch=main&event=workflow_dispatch&per_page=100" \
+            --jq '.workflow_runs[] | [.display_title, .status] | @tsv')
+          if awk -F '\t' -v title="Firmware $device @ $pin" '$1 == title {found=1} END {exit !found}' <<< "$runs"; then
+            echo "上游提交已有完整构建记录：$pin。失败的运行可手动重试。" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if awk -F '\t' '$2 != "completed" {busy=1} END {exit !busy}' <<< "$runs"; then
+            echo "已有构建在运行或排队，下次检查时再处理 $pin。" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh workflow run build.yml --ref main -f pin_commit="$pin" -f soc=an7581 \
+            -f device_profile="$device" -f jobs=4 -f make_release=false -f smoke_only=false -f packages_only=false
+          echo "已触发 $device 的完整 Artifact 构建：$pin" >> "$GITHUB_STEP_SUMMARY"

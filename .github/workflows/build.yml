@@ -1,4 +1,5 @@
 name: Build ponwrt firmware
+run-name: ${{ inputs.make_release && 'Release' || inputs.smoke_only && 'Smoke' || inputs.packages_only && 'Packages' || 'Firmware' }} ${{ inputs.device_profile }} @ ${{ inputs.pin_commit }}
 
 on:
   workflow_dispatch:
@@ -67,6 +68,8 @@ jobs:
     steps:
       - name: 取出构建脚本
         uses: actions/checkout@v4
+        with:
+          persist-credentials: ${{ inputs.make_release }}
 
       - name: 参数与脚本预检
         env:
@@ -111,12 +114,13 @@ jobs:
           key: cc-v1-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json', 'build-ponwrt.sh', 'tools/**', 'package/**', 'overlay/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             cc-v1-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-
+            cc-v1-${{ runner.os }}-${{ inputs.soc }}-
 
       - name: 编译与产物校验
         id: compile
         timeout-minutes: 325
         env:
-          CCACHE_MAXSIZE: 2G
+          CCACHE_MAXSIZE: 4G
         run: bash build-ponwrt.sh
 
       - name: 收集诊断和已校验产物

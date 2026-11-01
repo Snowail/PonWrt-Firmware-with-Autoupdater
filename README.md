@@ -80,6 +80,12 @@ Actions 每次按一个 SoC 和一个设备 profile 构建。上游配置还列�
 
 `dl/` 和 ccache 分开缓存；下载完成后即使编译失败也保存下载缓存。源码和 feeds/主题版本通过 commit 与 `sources.lock.json` 固定。
 
+### 跟随上游更新
+
+Actions 的 **Check upstream PonWrt** 每 15 分钟检查一次 `pbs05/ponwrt` 默认分支，也可手动运行。发现新提交后，工作流锁定该 SHA，为 Nokia XG-040G-MD UBI 编译完整镜像并上传 Artifact。feeds 和主题沿用仓库锁定版本。若有构建正在排队或执行，监测会等到后续检查再选取最新提交。已记录的同一提交跳过重复构建；失败可在原运行中重试。验证 Artifact 后，可在手动构建中填入该 SHA 并勾选 `make_release` 发布正式版。
+
+完整编译使用 4 GB ccache。优先恢复同一上游提交的缓存，更新提交时可复用同 SoC 的缓存。
+
 ### 方式 B：本地 / 自己的服务器
 
 ```bash
