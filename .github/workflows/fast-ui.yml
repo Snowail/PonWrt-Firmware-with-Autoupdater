@@ -1,4 +1,4 @@
-name: Fast plugin and LuCI update
+name: Test backup and update page
 
 on: workflow_dispatch
 
@@ -13,13 +13,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: 生成更新插件与升级页
+      - name: 生成测试机专用的备份与更新页面
         run: python3 tools/build-fast-ui.py out
       - name: 验证安装与回滚
         run: |
           sh -n fast-ui/apply.sh
-          sh -n overlay/usr/bin/ponwrt-update-check
-          bash tests/test-update.sh
           bash tests/test-fast-ui.sh out
       - uses: actions/upload-artifact@v4
         with:

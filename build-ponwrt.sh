@@ -171,6 +171,7 @@ FLASH_JS="feeds/luci/modules/luci-mod-system/htdocs/luci-static/resources/view/s
 if [ -f "$FLASH_JS" ]; then
   python3 "$REPO_DIR/tools/patch-flash.py" "$FLASH_JS"
   node --check "$FLASH_JS"
+  node "$REPO_DIR/tests/test-flash-page.js" "$FLASH_JS"
   cp "$FLASH_JS" "$DIAG_DIR/flash.js"
 else
   echo "  !! 未找到 $FLASH_JS"; exit 1

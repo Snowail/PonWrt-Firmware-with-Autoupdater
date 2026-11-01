@@ -3,7 +3,7 @@
 本仓库用 GitHub Actions 自动构建 **pbs05/ponwrt** 固件（ImmortalWrt + Airoha AN7581/AN7583 的 PON 支持），
 并叠加了一套通用定制：Aurora 主题、简体中文、常用插件、固定 LAN 网段。
 
-[完整构建 #17](https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/actions/runs/41230731864) 已成功生成 Nokia MD UBI 镜像。只更新现有固件的在线更新插件和 LuCI 升级页时，选择 **Actions → Fast plugin and LuCI update**。[安装和回滚](fast-ui/README.md) · [完整构建流程](BUILDING-zh.md)
+[完整构建 #17](https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/actions/runs/41230731864) 已生成 Nokia MD UBI 镜像。在测试机验证“备份与更新”页面时，选择 **Actions → Test backup and update page**。快速包只替换页面。正式发布时，完整固件内置同一页面补丁。新增软件包随上游版本更新再编译。[页面测试与回滚](fast-ui/README.md) · [完整构建流程](BUILDING-zh.md)
 
 ---
 
@@ -160,8 +160,8 @@ LuCI（`http://10.0.0.1`）→ 网络 → PON：
 | 项目 | 说明 |
 |---|---|
 | 当前版本 | 显示设备型号与编译时间（来自 `/etc/ponwrt-version`） |
-| 最新版本 | 从本仓库的 `version.json` 读取已发布的正式设备版本 |
-| 状态 | 发现新版本 / 已是最新 / 检查失败（附原因） |
+| 最新版本 | 点击“立即检查”后从本仓库的 `version.json` 读取已发布的正式设备版本 |
+| 状态 | 首次打开显示“尚未检查”，手动检查后显示结果或错误原因 |
 | GitHub 代理 | 国内访问 GitHub 不稳时可填代理，如 `http://10.0.0.5:7897` |
 | 立即检查 | 手动刷新版本信息 |
 | 下载并刷写 | 核对机型 → 下载固定 Release 固件 → **校验 SHA256** → `sysupgrade -T` → 刷写（保留配置） |

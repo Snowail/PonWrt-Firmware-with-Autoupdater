@@ -167,7 +167,9 @@ class PatchTests(unittest.TestCase):
         once = patcher.patch(src)
         twice = patcher.patch(once)
         self.assertEqual(twice.count(patcher.BEGIN), 1)
-        self.assertEqual(twice.count("tasks.push(fs.exec"), 1)
+        self.assertEqual(twice, once)
+        self.assertEqual(patcher.undo(once), src)
+        self.assertNotIn("tasks.push(fs.exec", twice)
 
     def test_missing_anchor_rejected(self):
         with self.assertRaises(SystemExit):

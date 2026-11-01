@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an on-device update using the same overlay and flash page as the firmware."""
+"""Package the same LuCI backup and update page that the full firmware builds."""
 import hashlib
 import io
 import json
@@ -12,8 +12,6 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 FLASH = "www/luci-static/resources/view/system/flash.js"
-BACKEND = "usr/bin/ponwrt-update-check"
-ACL = "usr/share/rpcd/acl.d/luci-app-ponwrt-update.json"
 
 
 def build(output):
@@ -32,17 +30,15 @@ def build(output):
         subprocess.run(["curl", "-fsSL", "--retry", "3", "--max-time", "60", "-o", str(page), url], check=True)
         subprocess.run([sys.executable, str(REPO / "tools/patch-flash.py"), str(page)], check=True)
         subprocess.run(["node", "--check", str(page)], check=True)
+        subprocess.run(["node", str(REPO / "tests/test-flash-page.js"), str(page)], check=True)
         files = {
             "payload/" + FLASH: (page, 0o644),
-            "payload/" + BACKEND: (REPO / "overlay" / BACKEND, 0o755),
-            "payload/" + ACL: (REPO / "overlay" / ACL, 0o644),
             "apply.sh": (REPO / "fast-ui/apply.sh", 0o755),
             "README.md": (REPO / "fast-ui/README.md", 0o644),
         }
         # Explicit Unix permissions and line endings also work in Windows checkouts.
         contents = {name: (path.read_text(encoding="utf-8").encode(), mode)
                     for name, (path, mode) in files.items()}
-    json.loads(contents["payload/" + ACL][0])
     contents["build-info"] = (f"ponwrt={lock['ponwrt']}\nluci={luci['commit']}\nsource={revision}\n".encode(), 0o644)
     sums = "".join(f"{hashlib.sha256(data).hexdigest()}  {name}\n" for name, (data, _) in contents.items())
     contents["sha256sums"] = (sums.encode(), 0o644)

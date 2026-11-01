@@ -18,33 +18,47 @@ BEGIN = '/* ponwrt updater ==== 由 tools/patch-flash.py 注入，勿手改 ====
 END = '/* ponwrt updater ==== end ==== */'
 
 BLOCK = BEGIN + r"""
-var PU = (function () { try { return JSON.parse((pu && pu.stdout) || '{}'); } catch (e) { return {}; } })();
 var _ponwrtOrigRender = m.render.bind(m);
 m.render = function () {
+	var current = E('span', {}, '读取中…');
+	var latest = E('span', {}, '—');
+	var status = E('span', {}, '尚未检查');
+	var proxyCell = E('span', {}, '读取中…');
+	var proxy = '';
 	var cells = [
-		[ '当前版本', (PU.device || '未知') + ' / ' + (PU.cur_built || '未知') ],
-		[ '最新版本', PU.latest || '-' ],
-		[ '状态', PU.error ? ('检查失败：' + PU.error) : (PU.update ? '发现新版本' : '已是最新') ],
-		[ 'GitHub 代理', PU.proxy || '直连' ]
+		[ '当前版本', current ], [ '最新版本', latest ],
+		[ '状态', status ], [ 'GitHub 代理', proxyCell ]
 	];
 	var btnCheck = E('button', { 'class': 'cbi-button cbi-button-action', 'click': function () {
-		ui.showModal('正在检查…', [ E('p', { 'class': 'spinning' }, '') ]);
+		btnCheck.disabled = true;
+		btnFlash.disabled = true;
+		status.textContent = '正在检查…';
+		latest.textContent = '—';
 		return fs.exec('/usr/bin/ponwrt-update-check', [ '--json' ]).then(function (r) {
-			ui.hideModal();
-			ui.addNotification(null, E('pre', {}, r.stdout || ''), 'info');
-		});
+			if (r.code !== 0) throw new Error(r.stderr || '更新检查程序执行失败');
+			var result = JSON.parse(r.stdout);
+			if (result.error) throw new Error(result.error);
+			if (!result.latest || (result.update !== 0 && result.update !== 1))
+				throw new Error('更新检查返回的数据不完整');
+			latest.textContent = result.latest;
+			status.textContent = result.update ? '发现新版本' : '已是最新';
+			btnFlash.disabled = isReadonlyView || !result.update;
+		}).catch(function (err) {
+			status.textContent = '检查失败：' + err.message;
+		}).finally(function () { btnCheck.disabled = false; });
 	} }, [ '立即检查' ]);
-	var btnFlash = E('button', { 'class': 'cbi-button cbi-button-negative', 'style': 'margin-left:.5em', 'click': function () {
+	var btnFlash = E('button', { 'disabled': true, 'class': 'cbi-button cbi-button-negative', 'style': 'margin-left:.5em', 'click': function () {
 		if (!confirm('将下载最新固件并立即刷写，期间不要断电。继续？')) return;
 		ui.showModal('正在下载…', [ E('p', { 'class': 'spinning' }, '') ]);
 		return fs.exec('/usr/bin/ponwrt-update-check', [ '--flash' ]).then(function (r) {
-			ui.hideModal();
 			ui.addNotification(null, E('pre', {}, (r.stdout || '') + (r.stderr || '')), 'info');
-		});
+		}).catch(function (err) {
+			ui.addNotification(null, E('p', {}, err.message), 'error');
+		}).finally(function () { ui.hideModal(); });
 	} }, [ '下载并刷写' ]);
-	var btnProxy = E('button', { 'class': 'cbi-button', 'style': 'margin-left:.5em', 'click': function () {
+	var btnProxy = E('button', { 'disabled': isReadonlyView || null, 'class': 'cbi-button', 'style': 'margin-left:.5em', 'click': function () {
 		var inp = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'style': 'width:100%',
-			'placeholder': 'http://10.0.0.5:7897', 'value': PU.proxy || '' });
+			'placeholder': 'http://10.0.0.5:7897', 'value': proxy });
 		ui.showModal('GitHub 代理', [
 			E('p', {}, '留空表示直连。例如：http://10.0.0.5:7897'),
 			inp,
@@ -70,8 +84,21 @@ m.render = function () {
 		E('div', { 'class': 'cbi-page-actions', 'style': 'margin-top:1em' }, [ btnCheck, btnFlash, btnProxy ])
 	]);
 	var attach = function (node) {
-		if (node && node.appendChild)
-			node.appendChild(box);
+		node.appendChild(box);
+		fs.read('/etc/ponwrt-version').then(function (text) {
+			var device = /^device=([^\r\n]+)$/m.exec(text);
+			var built = /^built=([^\r\n]+)$/m.exec(text);
+			if (!device || !built) throw new Error('缺少 device 或 built 字段');
+			current.textContent = device[1] + ' / ' + built[1];
+		}).catch(function (err) {
+			current.textContent = '无法读取 /etc/ponwrt-version：' + err.message;
+		});
+		fs.read('/etc/ponwrt-update.proxy').then(function (text) {
+			proxy = text.trim();
+			proxyCell.textContent = proxy || '直连';
+		}).catch(function (err) {
+			proxyCell.textContent = err.name === 'NotFoundError' ? '直连' : '读取代理失败：' + err.message;
+		});
 		return node;
 	};
 	var r = _ponwrtOrigRender();
@@ -79,28 +106,15 @@ m.render = function () {
 };
 """ + END + "\n"
 
-FETCH = ("tasks.push(fs.exec('/usr/bin/ponwrt-update-check', [ '--json' ])"
-         ".catch(function () { return { code: 1, stdout: '{}' }; }));\n\t\t")
-
-
 def undo(src):
-    src = re.sub(re.escape(BEGIN) + r'.*?' + re.escape(END) + r'\n?', '', src, flags=re.S)
-    src = re.sub(r"tasks\.push\(fs\.exec\('/usr/bin/ponwrt-update-check'[^\n]*?\n", '', src)
+    src = re.sub(r'\n' + re.escape(BEGIN) + r'.*?' + re.escape(END) + r'\n?', '', src, flags=re.S)
+    src = re.sub(r"(?m)^[ \t]*tasks\.push\(fs\.exec\('/usr/bin/ponwrt-update-check'[^\n]*?\n", '', src)
     src = re.sub(r'render\(\[([^\]]*?),\s*pu\]\)', r'render([\1])', src)
     return src
 
 
 def patch(src):
     src = undo(src)
-    if 'return Promise.all(tasks);' not in src:
-        raise SystemExit('FAIL: Promise.all anchor not found')
-    src = src.replace('return Promise.all(tasks);', FETCH + 'return Promise.all(tasks);', 1)
-
-    m = re.search(r'render\(\s*\[([^\]]*)\]\s*\)', src)
-    if not m:
-        raise SystemExit('FAIL: render() anchor not found')
-    src = src[:m.start()] + 'render([%s, pu])' % m.group(1).rstrip() + src[m.end():]
-
     m2 = re.search(r'm\.readonly\s*=\s*isReadonlyView\s*;', src)
     if not m2:
         raise SystemExit('FAIL: form anchor not found')
