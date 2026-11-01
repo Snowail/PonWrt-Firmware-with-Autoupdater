@@ -22,6 +22,7 @@ async function test(metadata, expected) {
 		render() { return Promise.resolve({ appendChild(box) { assert.equal(box.id, 'ponwrt-update'); } }); }
 	}
 	let calls = 0;
+	let phase = 'idle';
 	let online = false;
 	const fs = {
 		stat: async () => ({}),
@@ -39,6 +40,8 @@ async function test(metadata, expected) {
 			saved = value;
 		},
 		exec: async (cmd, args) => {
+			if (args[0] === '--status') return { code: 0, stdout: JSON.stringify({phase, bytes: 1048576, total: 2097152}) };
+			if (args[0] === '--download') { phase = 'downloading'; return { code: 0 }; }
 			calls++;
 			assert.equal(cmd, '/usr/bin/ponwrt-update-check');
 			assert.deepEqual(args, ['--json']);
@@ -53,6 +56,10 @@ async function test(metadata, expected) {
 	await new Promise(resolve => setImmediate(resolve));
 	const value = key => rows.get(key).textContent;
 	assert.equal(calls, 0);
+	assert.equal(buttons.get('刷写已下载固件').disabled, true);
+	await buttons.get('下载固件').click();
+	assert.match(value('下载进度'), /50%/);
+	assert.equal(buttons.get('刷写已下载固件').disabled, true);
 	assert.match(value('当前版本'), expected);
 	const local = value('当前版本');
 	assert.equal(value('状态'), '尚未检查');

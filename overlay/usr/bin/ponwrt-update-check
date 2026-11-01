@@ -4,7 +4,7 @@
 # 用法:
 #   ponwrt-update-check                 人类可读输出
 #   ponwrt-update-check --json          输出 JSON（供 LuCI 页面解析）
-#   ponwrt-update-check --flash         下载最新固件、校验 SHA256、调用 sysupgrade
+#   --download | --status | --flash    后台下载、查询进度、刷写已校验镜像
 #   ponwrt-update-check --proxy URL ... 临时指定代理
 #
 # GitHub 代理配置：/etc/ponwrt-update.proxy（内容形如 http://10.0.0.5:7897）
@@ -17,6 +17,7 @@ LOCAL="/etc/ponwrt-version"
 PROXY_FILE="/etc/ponwrt-update.proxy"
 INTERVAL="/etc/ponwrt-update.interval"
 STATE="/etc/ponwrt-update.state"
+JOB="/tmp/ponwrt-firmware"
 
 PROXY=""
 case "${1:-}" in
@@ -27,11 +28,11 @@ esac
 # fetch <url> <out> [timeout]
 fetch() {
     if [ -n "$PROXY" ]; then
-        curl -fsSL --max-time "${3:-25}" -x "$PROXY" -o "$2" "$1" 2>/dev/null && return 0
-        curl -fsSL --max-time "${3:-25}" --noproxy '*' -o "$2" "$1" 2>/dev/null && return 0
+        curl -fsSL --max-time "${3:-25}" -D "${4:-/dev/null}" -x "$PROXY" -o "$2" "$1" 2>/dev/null && return 0
+        curl -fsSL --max-time "${3:-25}" -D "${4:-/dev/null}" --noproxy '*' -o "$2" "$1" 2>/dev/null && return 0
         return 1
     fi
-    curl -fsSL --max-time "${3:-25}" -o "$2" "$1" 2>/dev/null
+    curl -fsSL --max-time "${3:-25}" -D "${4:-/dev/null}" -o "$2" "$1" 2>/dev/null
 }
 
 json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
@@ -41,6 +42,43 @@ cur_commit="$(sed -n 's/^commit=//p' "$LOCAL" 2>/dev/null)"
 cur_device="$(sed -n 's/^device=//p' "$LOCAL" 2>/dev/null)"
 cur_target="$(sed -n 's/^target=//p' "$LOCAL" 2>/dev/null)"
 identity="$cur_device/$cur_built"
+# Fixed paths on BusyBox images without stat(1); only use ls metadata fields.
+# shellcheck disable=SC2012
+private_job() { ls -ldn "$JOB" 2>/dev/null | awk '$1 == "drwx------" && $3 == 0 {ok=1} END {exit !ok}'; }
+phase() { printf '%s\n' "$1" > "$JOB/phase.new" && mv "$JOB/phase.new" "$JOB/phase"; }
+fail_job() { printf '%s\n' "$1" > "$JOB/error"; phase failed; exit 1; }
+verified() {
+    (cd "$JOB" && sha256sum -c checksum >/dev/null) && sysupgrade -T "$JOB/image.itb"
+}
+case "${1:-}" in
+    --status)
+        if [ -e "$JOB" ]; then private_job || exit 1; fi
+        state=$(cat "$JOB/phase" 2>/dev/null || echo idle)
+        case "$state" in preparing|downloading|verifying|flashing)
+            if (exec 9<"$JOB/lock"; flock -n 9); then state=interrupted; fi ;;
+        esac
+        # shellcheck disable=SC2012
+        bytes=$(ls -ln "$JOB/image.itb" 2>/dev/null | awk 'END {print $5+0}')
+        total=$(awk 'tolower($1) ~ /^http\// {n=0} tolower($1)=="content-length:" {n=$2+0} END {printf "%.0f",n}' "$JOB/headers" 2>/dev/null || echo 0)
+        printf '{"phase":"%s","bytes":%s,"total":%s,"version":"%s","error":"%s"}\n' "$state" "$bytes" "$total" \
+            "$(cat "$JOB/version" 2>/dev/null)" "$(json_esc "$(cat "$JOB/error" 2>/dev/null)")"
+        exit 0 ;;
+    --download|--flash)
+        umask 077
+        mkdir "$JOB" 2>/dev/null || private_job || exit 1
+        exec 9>"$JOB/lock"
+        flock -n 9 || { echo '已有任务正在运行'; exit 1; }
+        if [ "$1" = --download ]; then
+            phase preparing || exit 1
+            rm -f "$JOB/image.itb" "$JOB/headers" "$JOB/version" "$JOB/error" "$JOB/checksum"
+            "$0" --worker </dev/null >/dev/null 2>&1 &
+        else
+            [ "$(cat "$JOB/phase" 2>/dev/null)" = ready ] || { echo '请先下载并校验'; exit 1; }
+            phase flashing || exit 1
+            (sleep 2; verified || fail_job '刷写前复核失败'; sysupgrade "$JOB/image.itb" || fail_job '启动刷写失败') </dev/null >/dev/null 2>&1 &
+        fi
+        exit 0 ;;
+esac
 now=$(date +%s)
 if [ "${1:-}" = --scheduled ]; then
     case "$(cat "$INTERVAL" 2>/dev/null || echo weekly)" in
@@ -128,20 +166,16 @@ case "${1:-}" in
             "$(json_esc "$lfile")" "$(json_esc "$lsha")" "$(json_esc "$lnotes")" "$update" \
             "$(json_esc "$err")" "$(json_esc "$PROXY")"
         ;;
-    --flash)
-        [ -z "$err" ] || { echo "$err"; exit 1; }
-        [ -n "$lfile" ] || { echo "没有可用的固件信息"; exit 1; }
-        [ "$update" = "1" ] || { echo "已是最新版本，无需刷写"; exit 0; }
-        echo "下载 $lfile ..."
-        fetch "$lurl" "$TMPF" 900 || { echo "下载失败"; exit 1; }
-        echo "校验 SHA256 ..."
-        got="$(sha256sum "$TMPF" | awk '{print $1}')"
-        if [ "$got" != "$lsha" ]; then
-            echo "校验失败：期望 $lsha 实际 $got"; rm -f "$TMPF"; exit 1
-        fi
-        sysupgrade -T "$TMPF" || { echo "设备固件兼容性检查失败"; exit 1; }
-        echo "校验通过，开始刷写（保留配置）..."
-        sysupgrade "$TMPF"
+    --worker)
+        [ -z "$err" ] || fail_job "$err"
+        [ "$update" = 1 ] || fail_job '没有可用的新版本'
+        echo "$latest" > "$JOB/version"
+        printf '%s  image.itb\n' "$lsha" > "$JOB/checksum"
+        phase downloading
+        fetch "$lurl" "$JOB/image.itb" 900 "$JOB/headers" || fail_job '固件下载失败，可重试'
+        phase verifying
+        verified || fail_job 'SHA256 或设备兼容性校验失败'
+        phase ready
         ;;
     *)
         [ -n "$PROXY" ] && echo "代理: $PROXY"

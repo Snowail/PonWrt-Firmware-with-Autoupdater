@@ -8,6 +8,7 @@ sed -e "s|/etc/ponwrt-version|$TMP_TEST/local|g" \
     -e "s|/etc/ponwrt-update.proxy|$TMP_TEST/proxy|g" \
     -e "s|/etc/ponwrt-update.interval|$TMP_TEST/interval|g" \
     -e "s|/etc/ponwrt-update.state|$TMP_TEST/state|g" \
+    -e "s|/tmp/ponwrt-firmware|$TMP_TEST/job|g" \
     "$ROOT/overlay/usr/bin/ponwrt-update-check" > "$TMP_TEST/update.sh"
 printf 'device=nokia_xg-040g-md-ubi\ntarget=an7581\nbuilt=20261030-120000\n' > "$TMP_TEST/local"
 printf fixture > "$TMP_TEST/firmware"
@@ -38,20 +39,21 @@ jsonfilter() {
 }
 sysupgrade() { printf '%s\n' "$*" >> "$TMP_TEST/flash-calls"; return 0; }
 export -f curl jsonfilter sysupgrade
-bash "$TMP_TEST/update.sh" --flash > "$TMP_TEST/output"
-[[ "$(wc -l < "$TMP_TEST/flash-calls")" == 2 ]]
+mkdir "$TMP_TEST/job"
+bash "$TMP_TEST/update.sh" --worker > "$TMP_TEST/output"
+[[ $(cat "$TMP_TEST/job/phase") == ready && "$(wc -l < "$TMP_TEST/flash-calls")" == 1 ]]
 grep -q '^-T ' "$TMP_TEST/flash-calls"
 rm "$TMP_TEST/flash-calls"
 TEST_DEVICE=wrong-device
-if bash "$TMP_TEST/update.sh" --flash > "$TMP_TEST/output"; then echo 'FAIL: wrong device accepted'; exit 1; fi
+if bash "$TMP_TEST/update.sh" --worker > "$TMP_TEST/output"; then echo 'FAIL: wrong device accepted'; exit 1; fi
 [[ ! -e "$TMP_TEST/flash-calls" ]]
 TEST_DEVICE=nokia_xg-040g-md-ubi
 TEST_URL=https://example.invalid/firmware.itb
-if bash "$TMP_TEST/update.sh" --flash > "$TMP_TEST/output"; then echo 'FAIL: wrong URL accepted'; exit 1; fi
+if bash "$TMP_TEST/update.sh" --worker > "$TMP_TEST/output"; then echo 'FAIL: wrong URL accepted'; exit 1; fi
 [[ ! -e "$TMP_TEST/flash-calls" ]]
 TEST_URL="https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/releases/download/test/$TEST_FILE"
 TEST_BUILT=20261029-120000
-bash "$TMP_TEST/update.sh" --flash > "$TMP_TEST/output"
+if bash "$TMP_TEST/update.sh" --worker > "$TMP_TEST/output"; then exit 1; fi
 [[ ! -e "$TMP_TEST/flash-calls" ]]
 echo 'PASS: compatible image, sysupgrade test, wrong device, wrong URL, downgrade rejection (all mocked)'
 

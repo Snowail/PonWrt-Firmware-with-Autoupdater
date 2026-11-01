@@ -15,6 +15,7 @@
 			"file": {
 				"/etc/ponwrt-update.interval": [ "read" ],
 				"/usr/bin/ponwrt-update-check --json": [ "exec" ],
+				"/usr/bin/ponwrt-update-check --status": [ "exec" ],
 				"/etc/ponwrt-version": [ "read" ],
 				"/etc/ponwrt-update.proxy": [ "read" ]
 			}
@@ -23,6 +24,7 @@
 			"ubus": { "file": [ "write", "exec" ] },
 			"file": {
 				"/usr/bin/ponwrt-update-check --flash": [ "exec" ],
+				"/usr/bin/ponwrt-update-check --download": [ "exec" ],
 				"/etc/ponwrt-update.interval": [ "write" ],
 				"/etc/ponwrt-update.proxy": [ "write" ]
 			}
