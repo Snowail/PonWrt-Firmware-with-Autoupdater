@@ -61,6 +61,9 @@ EXTRA_PACKAGES=(
   "CONFIG_PACKAGE_luci-app-ponwrt-update=y"   # 后端包，界面集成进备份/升级页
   "CONFIG_CCACHE_DIR=\"$HOME/ponwrt-ccache\""
 )
+while IFS= read -r pkg || [[ -n "$pkg" ]]; do
+  EXTRA_PACKAGES+=("CONFIG_PACKAGE_${pkg}=y")
+done < "$REPO_DIR/public-packages.txt"
 
 exec > >(tee -a "$LOG") 2>&1
 say() { printf '\n==> %s\n' "$*"; }
@@ -156,6 +159,9 @@ git -C package/luci-theme-aurora remote add origin "$AURORA_FEED"
 git -C package/luci-theme-aurora fetch --depth=1 origin "$AURORA_PIN"
 git -C package/luci-theme-aurora checkout --detach FETCH_HEAD
 python3 "$REPO_DIR/tools/source-lock.py" verify "$REPO_DIR/sources.lock.json" "$SRC_DIR" > "$DIAG_DIR/sources-resolved.json"
+sed -i 's/^PKG_HASH:=skip$/PKG_HASH:=e79982e1733d51b3237838e251bbc606e65aad1904884fb65a427d57bb6f83e3/' feeds/lucky/lucky/Makefile
+grep -qx 'PKG_HASH:=e79982e1733d51b3237838e251bbc606e65aad1904884fb65a427d57bb6f83e3' feeds/lucky/lucky/Makefile
+sed -i "s/option enabled '1'/option enabled '0'/" feeds/lucky/lucky/files/luckyuci
 
 say "[3d/7] 正确组装更新后端包并修补现有升级页面"
 PKG="package/luci-app-ponwrt-update"
@@ -281,11 +287,27 @@ if [ "${SMOKE_MODE}" = "1" ]; then
 fi
 
 say "[6/7] 编译（-j${NJOBS}）"
+mkdir -p files/etc/openclash/core
+curl --fail --location --retry 3 -o "$DIAG_DIR/mihomo.gz" https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-linux-arm64-v1.19.33.gz
+echo "ba408b317080ee265c46cb923a50018c1b82cbd708551cdd46a1e3e307396187  $DIAG_DIR/mihomo.gz" | sha256sum -c -
+gzip -dc "$DIAG_DIR/mihomo.gz" > files/etc/openclash/core/clash_meta
+chmod 755 files/etc/openclash/core/clash_meta
+rm -f "$DIAG_DIR/mihomo.gz"
+cp "$REPO_DIR/tools/99-ponwrt-service-defaults" files/etc/uci-defaults/
 run_make world
 touch "$DIAG_DIR/compile.ok"
 
 # ============================================================ 7. 产物
 say "[7/7] 收集产物"
 python3 "$REPO_DIR/tools/collect-artifacts.py" firmware "$SRC_DIR" "$OUT_DIR" "$SOC" "$DEV"
+if [[ "$DEV" == nokia_xg-040g-md-ubi ]]; then
+  # The #17 test unit allocates 1982 x 126976 bytes to fit and rootfs_data.
+  image_bytes=$(stat -c %s "$OUT_DIR"/*-squashfs-sysupgrade.itb)
+  (( image_bytes <= 192 * 1024 * 1024 )) || { echo "sysupgrade 超过公版 192 MiB 预算: $image_bytes"; exit 1; }
+fi
+manifest=("$OUT_DIR"/*.manifest)
+while IFS= read -r pkg || [[ -n "$pkg" ]]; do
+  grep -q "^$pkg " "${manifest[0]}" || { echo "镜像缺少 $pkg"; exit 1; }
+done < "$REPO_DIR/public-packages.txt"
 ls -lh "$OUT_DIR"
 say "完成"

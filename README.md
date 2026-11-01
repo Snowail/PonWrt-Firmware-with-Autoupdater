@@ -23,10 +23,21 @@
 
 - **LuCI 简体中文** + **Aurora 主题**（首次启动自动设为默认主题与中文）
 - **默认 LAN：`10.0.0.1/24`**，DHCP 池 `10.0.0.100–10.0.0.249`
-- 预装插件：
-  - [ZeroTier](https://www.zerotier.com/)（`zerotier` + LuCI 界面）
-  - `iperf3`（测速）
-  - `nlbwmon`（按设备流量统计，LuCI「服务 → 带宽监控」）
+
+### 公版额外软件包
+
+| 用途 | 内置项目 |
+|---|---|
+| 界面、升级 | `luci-theme-aurora`、LuCI 简体中文、`luci-compat`、`luci-app-ponwrt-update`、`curl`、`jsonfilter`、`ca-bundle` |
+| DNS | `adguardhome`、`luci-app-adguardhome`、`smartdns`、`luci-app-smartdns` |
+| 分流与公网服务 | `luci-app-openclash` 和 Mihomo ARM64 v1.19.33 核心、`lucky`、`luci-app-lucky`、`frpc`、`luci-app-frpc` |
+| 域名、唤醒与 NAT | `luci-app-ddns`、`ddns-scripts`、`ddns-scripts-services`、`luci-app-wol`、`luci-app-upnp`、`miniupnpd-nftables` |
+| 远程组网 | `zerotier`、`luci-app-zerotier`、`tailscale`、`luci-app-tailscale`、`wireguard-tools`、`kmod-wireguard`、`luci-proto-wireguard` |
+| 带宽与监控 | `sqm-scripts`、`luci-app-sqm`、`luci-app-statistics`（collectd 系统和接口曲线）、`nlbwmon`、`luci-app-nlbwmon`（按终端统计） |
+| 文件与共享 | `luci-app-filemanager`、`openssh-sftp-server`、`samba4-server`、`luci-app-samba4` |
+| 诊断 | `iperf3`、`bind-dig`、`ethtool`、`htop` |
+
+全新安装默认关闭 AdGuard Home、OpenClash、SmartDNS、Lucky 和 UPnP。由用户在 LuCI 中选择是否启用。保留配置升级时沿用已保存的服务设置。完整固件的实际依赖与版本见该次 Release 附带的 `.manifest`。
 
 ## 三、支持机型
 

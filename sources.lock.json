@@ -2,6 +2,10 @@
   "description": "Candidate baseline resolved from default-branch history at 2026-10-31T05:51:00Z; not proof of the exact feeds used in run #15. Requires full build validation.",
   "ponwrt": "03c134544714617e196dd399c85ebb90fb6eefa1",
   "feeds": {
+    "lucky": {
+      "url": "https://github.com/gdy666/luci-app-lucky.git",
+      "commit": "91b506627c1d81fa323816e3aeafcbde493d03a9"
+    },
     "packages": {
       "url": "https://github.com/immortalwrt/packages.git",
       "commit": "48f609040f2e4beb16c1aa62af6a6aaafd2eb6cd"

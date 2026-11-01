@@ -1,0 +1,8 @@
+#!/bin/sh
+# Apply stock-image defaults only. Keep settings restored through sysupgrade.
+for spec in 'adguardhome.config.enabled' 'openclash.config.enable' 'smartdns.@smartdns[0].enabled' 'upnpd.config.enabled'; do
+    cfg=${spec%%.*}
+    cmp -s "/etc/config/$cfg" "/rom/etc/config/$cfg" || continue
+    uci -q set "$spec=0" && uci commit "$cfg"
+done
+exit 0
