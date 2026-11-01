@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-ponwrt-update
-PKG_VERSION:=1.1.0
+PKG_VERSION:=1.2.0
 PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 PKGARCH:=all
@@ -19,10 +19,17 @@ endef
 define Build/Compile
 endef
 
+define Package/luci-app-ponwrt-update/conffiles
+/etc/ponwrt-update.interval
+endef
+
 # root/ is assembled from the canonical overlay before package metadata scanning.
-# Install only the backend and ACL; the existing flash.js is patched separately.
 define Package/luci-app-ponwrt-update/install
 	$(INSTALL_DIR) $(1)/usr/bin $(1)/usr/share/rpcd/acl.d
+	$(INSTALL_DIR) $(1)/etc/uci-defaults $(1)/www/luci-static/resources/ponwrt
+	$(INSTALL_CONF) ./root/etc/ponwrt-update.interval $(1)/etc/
+	$(INSTALL_BIN) ./root/etc/uci-defaults/92-ponwrt-update-schedule $(1)/etc/uci-defaults/
+	$(INSTALL_DATA) ./root/www/luci-static/resources/ponwrt/notice.js $(1)/www/luci-static/resources/ponwrt/
 	$(INSTALL_BIN) ./root/usr/bin/ponwrt-update-check $(1)/usr/bin/
 	$(INSTALL_DATA) ./root/usr/share/rpcd/acl.d/luci-app-ponwrt-update.json $(1)/usr/share/rpcd/acl.d/
 endef

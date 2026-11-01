@@ -19,6 +19,8 @@ jobs:
         run: |
           sh -n fast-ui/apply.sh
           bash tests/test-fast-ui.sh out
+          bash tests/test-update.sh
+          node tests/test-notice.js
       - uses: actions/upload-artifact@v4
         with:
           name: ponwrt-fast-ui-${{ github.run_id }}-${{ github.run_attempt }}

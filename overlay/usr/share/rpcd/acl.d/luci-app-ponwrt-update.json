@@ -1,15 +1,29 @@
 {
+	"luci-base": {
+		"read": {
+			"ubus": { "file": [ "read" ] },
+			"file": {
+				"/etc/ponwrt-version": [ "read" ],
+				"/etc/ponwrt-update.state": [ "read" ]
+			}
+		}
+	},
 	"luci-app-ponwrt-update": {
 		"description": "ponwrt firmware update check (GitHub releases)",
 		"read": {
+			"ubus": { "file": [ "read", "exec" ] },
 			"file": {
-				"/usr/bin/ponwrt-update-check": [ "exec" ],
+				"/etc/ponwrt-update.interval": [ "read" ],
+				"/usr/bin/ponwrt-update-check --json": [ "exec" ],
 				"/etc/ponwrt-version": [ "read" ],
 				"/etc/ponwrt-update.proxy": [ "read" ]
 			}
 		},
 		"write": {
+			"ubus": { "file": [ "write", "exec" ] },
 			"file": {
+				"/usr/bin/ponwrt-update-check --flash": [ "exec" ],
+				"/etc/ponwrt-update.interval": [ "write" ],
 				"/etc/ponwrt-update.proxy": [ "write" ]
 			}
 		}

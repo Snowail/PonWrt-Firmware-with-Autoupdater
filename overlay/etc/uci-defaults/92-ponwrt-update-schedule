@@ -1,0 +1,9 @@
+#!/bin/sh
+# Preserve the administrator's crontab when installing or upgrading the firmware.
+tab=/etc/crontabs/root
+job='17 * * * * /usr/bin/ponwrt-update-check --scheduled'
+mkdir -p /etc/crontabs || exit 1
+grep -Fqx "$job" "$tab" 2>/dev/null || printf '\n%s\n' "$job" >> "$tab" || exit 1
+# uci-defaults normally runs before cron at boot. Reload an already running cron.
+/etc/init.d/cron running && /etc/init.d/cron restart
+exit 0

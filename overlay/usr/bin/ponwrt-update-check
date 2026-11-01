@@ -13,10 +13,10 @@
 REPO="Snowail/PonWrt-Firmware-with-Autoupdater"
 BASE="https://github.com/${REPO}/releases/latest/download"
 RAW="https://raw.githubusercontent.com/${REPO}/main/version.json"
-TMPJ="/tmp/ponwrt-update.json"
-TMPF="/tmp/ponwrt-update.itb"
 LOCAL="/etc/ponwrt-version"
 PROXY_FILE="/etc/ponwrt-update.proxy"
+INTERVAL="/etc/ponwrt-update.interval"
+STATE="/etc/ponwrt-update.state"
 
 PROXY=""
 case "${1:-}" in
@@ -40,6 +40,30 @@ cur_built="$(sed -n 's/^built=//p' "$LOCAL" 2>/dev/null)"
 cur_commit="$(sed -n 's/^commit=//p' "$LOCAL" 2>/dev/null)"
 cur_device="$(sed -n 's/^device=//p' "$LOCAL" 2>/dev/null)"
 cur_target="$(sed -n 's/^target=//p' "$LOCAL" 2>/dev/null)"
+identity="$cur_device/$cur_built"
+now=$(date +%s)
+if [ "${1:-}" = --scheduled ]; then
+    case "$(cat "$INTERVAL" 2>/dev/null || echo weekly)" in
+        daily) period=86400 ;;
+        weekly) period=604800 ;;
+        monthly) period=2592000 ;;
+        *) exit 0 ;;
+    esac
+    if [ -r "$STATE" ]; then
+        { IFS= read -r previous && IFS= read -r checked; } < "$STATE"
+        case "$checked" in
+            ''|*[!0-9]*) ;;
+            *) if [ "$identity" = "$previous" ] && [ "$now" -ge "$checked" ] &&
+                  [ "$((now - checked))" -lt "$period" ]; then exit 0; fi ;;
+        esac
+    fi
+fi
+
+work=$(mktemp -d /tmp/ponwrt-check.XXXXXX) || exit 1
+TMPJ="$work/remote.json"
+TMPF="$work/image.itb"
+trap 'rm -f "$TMPJ" "$TMPF"; rmdir "$work"' EXIT
+trap 'exit 1' HUP INT TERM
 
 latest=""; lcommit=""; lbuilt=""; lfile=""; lsha=""; lnotes=""; lurl=""; err=""
 
@@ -73,12 +97,29 @@ else
 fi
 
 update=0
+if [ -z "$err" ] && ! printf '%s\n' "$cur_built" "$lbuilt" | awk '
+    length != 15 || $0 !~ /^[0-9]+-[0-9]+$/ || substr($0,9,1) != "-" { exit 1 }'; then
+    err="固件编译时间无效"
+fi
+case "$latest" in *[!a-zA-Z0-9._-]*) err="固件版本标记无效";; esac
 if [ -z "$err" ] && [ -n "$latest" ] && \
    LC_ALL=C awk -v latest="$lbuilt" -v current="$cur_built" 'BEGIN { exit !(("x" latest) > ("x" current)) }'; then
     update=1
 fi
 
+# Bind the notice to the installed image. Failed checks keep the last verified result.
+if [ -z "$err" ]; then
+    notice=""
+    [ "$update" != 1 ] || notice="$latest"
+    tmpstate=$(mktemp "$STATE.XXXXXX") || exit 1
+    if ! printf '%s\n' "$identity" "$now" "$notice" "$latest" > "$tmpstate" || ! mv -f "$tmpstate" "$STATE"; then
+        rm -f "$tmpstate"
+        exit 1
+    fi
+fi
+
 case "${1:-}" in
+    --scheduled) [ -z "$err" ] ;;
     --json)
         printf '{"current":"%s","cur_built":"%s","cur_commit":"%s","device":"%s",' \
             "$(json_esc "${cur_device:-unknown}")" "$(json_esc "$cur_built")" "$(json_esc "$cur_commit")" "$(json_esc "$cur_device")"

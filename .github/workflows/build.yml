@@ -84,6 +84,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_*.py' -v
           bash tests/test-build-lib.sh
           bash tests/test-update.sh
+          node tests/test-notice.js
 
       - name: 释放磁盘空间
         run: |

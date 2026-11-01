@@ -170,6 +170,9 @@ git diff --exit-code -- package/Makefile
 FLASH_JS="feeds/luci/modules/luci-mod-system/htdocs/luci-static/resources/view/system/flash.js"
 if [ -f "$FLASH_JS" ]; then
   python3 "$REPO_DIR/tools/patch-flash.py" "$FLASH_JS"
+  HEADER="feeds/luci/modules/luci-base/ucode/template/header.ut"
+  grep -Fq 'sessionid' "$HEADER" && grep -Fq 'ctx.authsession' "$HEADER" || { echo '缺少 LuCI 登录模板'; exit 1; }
+  cat "$REPO_DIR/tools/ponwrt-banner.ut" >> "$HEADER"
   node --check "$FLASH_JS"
   node "$REPO_DIR/tests/test-flash-page.js" "$FLASH_JS"
   cp "$FLASH_JS" "$DIAG_DIR/flash.js"

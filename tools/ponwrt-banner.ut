@@ -1,0 +1,7 @@
+{% if (ctx.authsession && ctx.authuser): %}
+<script>
+	document.addEventListener('luci-loaded', function () {
+		L.require('ponwrt.notice').then(function (notice) { notice.start(); });
+	}, { once: true });
+</script>
+{% endif %}

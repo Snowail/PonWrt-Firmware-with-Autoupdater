@@ -25,11 +25,30 @@ m.render = function () {
 	var status = E('span', {}, '尚未检查');
 	var proxyCell = E('span', {}, '读取中…');
 	var proxy = '';
+	var manualCheck = false;
+	var savedInterval;
+	var scheduleHint = E('span', {}, '');
+	var choices = { daily: '每天', weekly: '每周', monthly: '每 30 天', off: '关闭' };
+	var interval = E('select', { 'disabled': true, 'aria-label': '固件检查频率', 'change': function () {
+		var value = interval.value;
+		interval.disabled = true;
+		return fs.write('/etc/ponwrt-update.interval', value + '\n').then(function () {
+			savedInterval = value;
+			scheduleHint.textContent = ' 已保存';
+		}).catch(function (err) {
+			interval.value = savedInterval;
+			scheduleHint.textContent = ' 保存失败：' + err.message;
+		}).finally(function () { interval.disabled = isReadonlyView; });
+	} }, Object.keys(choices).map(function (key) {
+		return E('option', { value: key, selected: key === 'weekly' || null }, choices[key]);
+	}));
 	var cells = [
 		[ '当前版本', current ], [ '最新版本', latest ],
-		[ '状态', status ], [ 'GitHub 代理', proxyCell ]
+		[ '状态', status ], [ 'GitHub 代理', proxyCell ],
+		[ '固件检查频率', E('div', {}, [ interval, scheduleHint ]) ]
 	];
 	var btnCheck = E('button', { 'class': 'cbi-button cbi-button-action', 'click': function () {
+		manualCheck = true;
 		btnCheck.disabled = true;
 		btnFlash.disabled = true;
 		status.textContent = '正在检查…';
@@ -85,11 +104,27 @@ m.render = function () {
 	]);
 	var attach = function (node) {
 		node.appendChild(box);
+		fs.read('/etc/ponwrt-update.interval').then(function (text) {
+			savedInterval = text.trim();
+			if (!Object.prototype.hasOwnProperty.call(choices, savedInterval)) throw new Error('无效设置');
+			interval.value = savedInterval;
+			interval.disabled = isReadonlyView;
+		}).catch(function (err) {
+			scheduleHint.textContent = err.name === 'NotFoundError' ? ' 当前固件未内置定时检查' : ' 读取失败：' + err.message;
+		});
 		fs.read('/etc/ponwrt-version').then(function (text) {
 			var device = /^device=([^\r\n]+)$/m.exec(text);
 			var built = /^built=([^\r\n]+)$/m.exec(text);
 			if (!device || !built) throw new Error('缺少 device 或 built 字段');
 			current.textContent = device[1] + ' / ' + built[1];
+			fs.read('/etc/ponwrt-update.state').then(function (text) {
+				var record = text.trimEnd().split('\n');
+				if (manualCheck || record.length !== 4 || record[0] !== device[1] + '/' + built[1]) return;
+				latest.textContent = record[3];
+				status.textContent = (record[2] ? '发现新版本' : '已是最新') +
+					'（上次检查：' + new Date(Number(record[1]) * 1000).toLocaleString() + '）';
+				btnFlash.disabled = isReadonlyView || !record[2];
+			}).catch(function () { /* No cached result on older images or before the first check. */ });
 		}).catch(function (err) {
 			current.textContent = '无法读取 /etc/ponwrt-version：' + err.message;
 		});

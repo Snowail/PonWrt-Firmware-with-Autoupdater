@@ -7,11 +7,13 @@ const source = readFileSync(process.argv[2], 'utf8');
 async function test(metadata, expected) {
 	const rows = new Map();
 	const buttons = new Map();
+	let interval, saved;
 	function E(tag, attrs, children) {
 		const element = { textContent: typeof children === 'string' ? children : '', ...attrs };
 		if (tag === 'td') element.content = children;
 		if (tag === 'tr') rows.set(children[0].content, children[1].content);
 		if (tag === 'button') buttons.set(children[0], element);
+		if (tag === 'select') interval = element;
 		return element;
 	}
 	const section = { option: () => ({ subsection: section }) };
@@ -26,9 +28,15 @@ async function test(metadata, expected) {
 		trimmed: async () => '',
 		read: async path => {
 			if (path === '/etc/ponwrt-update.proxy') return '';
+			if (path === '/etc/ponwrt-update.interval') return 'weekly\n';
+			if (path === '/etc/ponwrt-update.state') return '';
 			assert.equal(path, '/etc/ponwrt-version');
 			if (metadata instanceof Error) throw metadata;
 			return metadata;
+		},
+		write: async (path, value) => {
+			assert.equal(path, '/etc/ponwrt-update.interval');
+			saved = value;
 		},
 		exec: async (cmd, args) => {
 			calls++;
@@ -48,6 +56,10 @@ async function test(metadata, expected) {
 	assert.match(value('当前版本'), expected);
 	const local = value('当前版本');
 	assert.equal(value('状态'), '尚未检查');
+	assert.equal(interval.value, 'weekly');
+	interval.value = 'daily';
+	await interval.change();
+	assert.equal(saved, 'daily\n');
 	await buttons.get('立即检查').click();
 	assert.equal(calls, 1);
 	assert.match(value('状态'), /RPC timeout/);
