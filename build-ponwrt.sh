@@ -12,6 +12,8 @@
 #   OUT_DIR         产物目录，默认 $HOME/out
 #
 set -euo pipefail
+STAGE="${PONWRT_STAGE:-all}"
+[[ "$STAGE" =~ ^(all|prepare|toolchain|build)$ ]] || exit 1
 
 # ---------------------------------------------------------------- 变量
 # 绝对不能把 TARGET / DEVICE 这类通用名字以环境变量传给子 make：
@@ -33,7 +35,7 @@ SRC_DIR="${SRC_DIR:-$HOME/ponwrt}"
 OUT_DIR="${OUT_DIR:-$HOME/out}"
 DATE_TAG="$(date -u +%Y%m%d-%H%M%S)"
 DIAG_DIR="${DIAG_DIR:-$HOME/ponwrt-diagnostics}"
-if [ -d "$DIAG_DIR" ] && [ -n "$(ls -A "$DIAG_DIR")" ]; then
+if [[ "$STAGE" == all || "$STAGE" == prepare ]] && [ -d "$DIAG_DIR" ] && [ -n "$(ls -A "$DIAG_DIR")" ]; then
   echo "!! 诊断目录必须为空: $DIAG_DIR"; exit 1
 fi
 mkdir -p "$DIAG_DIR"
@@ -98,7 +100,7 @@ trap collect_diagnostics EXIT
   || { echo '!! 冒烟模式和只编包模式不可同时开启'; exit 1; }
 [[ -z "$NJOBS" || "$NJOBS" =~ ^[1-9][0-9]?$ ]] || { echo '!! jobs 必须为 1–99'; exit 1; }
 # A clean source and output prevent stale files or the old overwritten package/Makefile.
-[ ! -e "$SRC_DIR" ] || { echo "!! 请使用新的源码目录: $SRC_DIR"; exit 1; }
+[[ "$STAGE" == toolchain || "$STAGE" == build || ! -e "$SRC_DIR" ]] || { echo "!! 请使用新的源码目录: $SRC_DIR"; exit 1; }
 if [ -d "$OUT_DIR" ] && [ -n "$(ls -A "$OUT_DIR")" ]; then
   echo "!! 产物目录必须为空: $OUT_DIR"; exit 1
 fi
@@ -114,6 +116,10 @@ NJOBS="${NJOBS:-$(( CORES < MEM_JOBS ? CORES : MEM_JOBS ))}"
 [ "$NJOBS" -ge 1 ] || NJOBS=1
 echo "并发: -j${NJOBS}   目标: ${SOC} / ${DEV}"
 
+if [[ "$STAGE" == toolchain || "$STAGE" == build ]]; then
+  [[ "$(cat "$SRC_DIR/.ponwrt-prepared")" == "$PIN/$SOC/$DEV/$SMOKE_MODE/$PKG_ONLY" ]] || exit 1
+  cd "$SRC_DIR"
+else
 # ============================================================ 1. 依赖
 say "[1/7] 安装编译依赖"
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
@@ -262,6 +268,27 @@ if grep -Eq 'build failed|ERROR: .*failed' "$DOWNLOAD_LOG"; then
   echo '!! 下载日志仍有失败记录，停止编译'; exit 1
 fi
 touch "$DIAG_DIR/download.ok"
+# Stable source timestamps allow valid cached tool/ compiler stamps to remain useful.
+# Cache identity includes the exact upstream, full config, scripts, feeds and host packages.
+find tools toolchain include -type f -exec touch -d @1600000000 {} +
+touch -d @1600000000 rules.mk
+printf '%s\n' "$PIN/$SOC/$DEV/$SMOKE_MODE/$PKG_ONLY" > .ponwrt-prepared
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+  key=$({
+    printf '%s\n' "$PIN" "${ImageOS:-}" "${ImageVersion:-}"
+    cat .config "$REPO_DIR/sources.lock.json"
+    sha256sum "$REPO_DIR/build-ponwrt.sh" "$REPO_DIR/tools/prepare-config.py" "$REPO_DIR/tools/build-lib.sh"
+    dpkg-query -W -f='${Package}=${Version}\n'
+  } | sha256sum | cut -d' ' -f1)
+  echo "toolchain_key=$key" >> "$GITHUB_OUTPUT"
+fi
+fi
+if [[ "$STAGE" == prepare ]]; then exit 0; fi
+if [[ "$STAGE" == toolchain ]]; then
+  run_make tools tools/install
+  run_make toolchain toolchain/install
+  exit 0
+fi
 
 # ============================================================ 6. 编译
 # 仅编译更新插件相关的三个包（给已刷旧固件的机器单独安装用）
@@ -287,12 +314,6 @@ if [ "${SMOKE_MODE}" = "1" ]; then
 fi
 
 say "[6/7] 编译（-j${NJOBS}）"
-mkdir -p files/etc/openclash/core
-curl --fail --location --retry 3 -o "$DIAG_DIR/mihomo.gz" https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-linux-arm64-v1.19.33.gz
-echo "ba408b317080ee265c46cb923a50018c1b82cbd708551cdd46a1e3e307396187  $DIAG_DIR/mihomo.gz" | sha256sum -c -
-gzip -dc "$DIAG_DIR/mihomo.gz" > files/etc/openclash/core/clash_meta
-chmod 755 files/etc/openclash/core/clash_meta
-rm -f "$DIAG_DIR/mihomo.gz"
 cp "$REPO_DIR/tools/99-ponwrt-service-defaults" files/etc/uci-defaults/
 run_make world
 touch "$DIAG_DIR/compile.ok"

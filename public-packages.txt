@@ -1,6 +1,5 @@
 adguardhome
 luci-app-adguardhome
-luci-app-openclash
 lucky
 luci-app-lucky
 luci-app-ddns
@@ -11,17 +10,11 @@ miniupnpd-nftables
 luci-proto-wireguard
 kmod-wireguard
 wireguard-tools
-luci-app-sqm
-sqm-scripts
-luci-app-filemanager
 openssh-sftp-server
-luci-app-statistics
 luci-app-tailscale-community
 tailscale
 luci-app-frpc
 frpc
-luci-app-smartdns
-smartdns
 luci-app-samba4
 samba4-server
 bind-dig

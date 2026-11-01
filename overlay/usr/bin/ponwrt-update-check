@@ -41,6 +41,14 @@ cur_built="$(sed -n 's/^built=//p' "$LOCAL" 2>/dev/null)"
 cur_commit="$(sed -n 's/^commit=//p' "$LOCAL" 2>/dev/null)"
 cur_device="$(sed -n 's/^device=//p' "$LOCAL" 2>/dev/null)"
 cur_target="$(sed -n 's/^target=//p' "$LOCAL" 2>/dev/null)"
+# Keep the established MD channel compatible with already installed firmware.
+# Other devices have independent pointers and must never fall back to MD latest.
+if [ "$cur_target/$cur_device" != an7581/nokia_xg-040g-md-ubi ]; then
+    case "$cur_target" in an7581|an7583) ;; *) exit 1 ;; esac
+    case "$cur_device" in ''|*[!a-z0-9_-]*) exit 1 ;; esac
+    BASE="https://raw.githubusercontent.com/${REPO}/main/versions/$cur_target/$cur_device"
+    RAW="$BASE/version.json"
+fi
 identity="$cur_device/$cur_built"
 # Fixed paths on BusyBox images without stat(1); only use ls metadata fields.
 # shellcheck disable=SC2012

@@ -1,5 +1,5 @@
 name: Build ponwrt firmware
-run-name: ${{ inputs.make_release && 'Release' || inputs.smoke_only && 'Smoke' || inputs.packages_only && 'Packages' || 'Firmware' }} ${{ inputs.device_profile }} @ ${{ inputs.pin_commit }}
+run-name: ${{ inputs.make_release && 'Release' || inputs.smoke_only && 'Smoke' || inputs.packages_only && 'Packages' || 'Firmware' }} ${{ inputs.targets || inputs.device_profile }} @ ${{ inputs.pin_commit }}
 
 on:
   workflow_dispatch:
@@ -14,6 +14,10 @@ on:
         description: '设备 profile（只构建此机型）'
         required: true
         default: nokia_xg-040g-md-ubi
+        type: string
+      targets:
+        description: '并行目标：留空用上方单机型；all 用 devices.json；或 soc:profile 逗号分隔（最多 8 台）'
+        default: ''
         type: string
       pin_commit:
         description: 'ponwrt 完整 commit SHA；feeds 和主题由 sources.lock.json 固定'
@@ -41,13 +45,32 @@ on:
 permissions:
   contents: read
 
-# Serialize publication as well as cache writes; do not interrupt a running build.
+# Serialize workflow runs; matrix jobs within each run execute concurrently.
 concurrency:
   group: ponwrt-build-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: targets
+        env:
+          TARGETS: ${{ inputs.targets }}
+          SOC: ${{ inputs.soc }}
+          DEVICE: ${{ inputs.device_profile }}
+        run: python3 tools/build-matrix.py
+
   build:
+    needs: plan
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.soc }} / ${{ matrix.device }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     permissions:
@@ -56,14 +79,16 @@ jobs:
       run:
         shell: bash
     env:
-      PONWRT_SOC: ${{ inputs.soc }}
-      PONWRT_DEVICE: ${{ inputs.device_profile }}
+      PONWRT_SOC: ${{ matrix.soc }}
+      PONWRT_DEVICE: ${{ matrix.device }}
       PONWRT_PIN: ${{ inputs.pin_commit }}
       PONWRT_JOBS: ${{ inputs.jobs }}
       PONWRT_SMOKE: ${{ inputs.smoke_only && '1' || '0' }}
       PONWRT_PKGS: ${{ inputs.packages_only && '1' || '0' }}
       PONWRT_DL: /home/runner/ponwrt-dl
       DIAG_DIR: /home/runner/ponwrt-diagnostics
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 4G
 
     steps:
       - name: 取出构建脚本
@@ -101,26 +126,60 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/ponwrt-dl
-          key: dl-v2-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-${{ inputs.device_profile }}-${{ hashFiles('build-ponwrt.sh', 'tools/prepare-config.py', 'package/**/Makefile') }}
+          key: dl-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-${{ hashFiles('public-packages.txt', 'build-ponwrt.sh', 'tools/prepare-config.py', 'package/**/Makefile') }}
           restore-keys: |
-            dl-v2-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-
-            dl-v2-${{ runner.os }}-${{ inputs.soc }}-
+            dl-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-
+            dl-v2-${{ runner.os }}-${{ matrix.soc }}-
 
       - name: 恢复编译缓存
         id: ccache
         uses: actions/cache/restore@v4
         with:
           path: ~/ponwrt-ccache
-          key: cc-v1-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json', 'build-ponwrt.sh', 'tools/**', 'package/**', 'overlay/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: cc-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json', 'build-ponwrt.sh', 'tools/**', 'package/**', 'overlay/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            cc-v1-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-
-            cc-v1-${{ runner.os }}-${{ inputs.soc }}-
+            cc-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-${{ inputs.pin_commit }}-
+            cc-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-
+
+      - name: 准备源码、配置与下载
+        id: prepare
+        env:
+          PONWRT_STAGE: prepare
+        run: bash build-ponwrt.sh
+
+      - name: 恢复工具链缓存（精确配置匹配）
+        id: toolchain
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/ponwrt/staging_dir/host
+            ~/ponwrt/staging_dir/toolchain-*
+            ~/ponwrt/build_dir/host
+            ~/ponwrt/build_dir/toolchain-*
+          key: tc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.soc }}-${{ matrix.device }}-${{ steps.prepare.outputs.toolchain_key }}
+
+      - name: 检查并完成工具链
+        id: tools
+        env:
+          PONWRT_STAGE: toolchain
+        run: bash build-ponwrt.sh
+
+      - name: 保存完整工具链（不等待固件成功）
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/ponwrt/staging_dir/host
+            ~/ponwrt/staging_dir/toolchain-*
+            ~/ponwrt/build_dir/host
+            ~/ponwrt/build_dir/toolchain-*
+          key: ${{ steps.toolchain.outputs.cache-primary-key }}
 
       - name: 编译与产物校验
         id: compile
         timeout-minutes: 325
         env:
-          CCACHE_MAXSIZE: 4G
+          PONWRT_STAGE: build
         run: bash build-ponwrt.sh
 
       - name: 收集诊断和已校验产物
@@ -139,7 +198,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ponwrt-${{ inputs.device_profile }}-${{ inputs.soc }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ponwrt-${{ matrix.device }}-${{ matrix.soc }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifact/
           include-hidden-files: true
           retention-days: 30
@@ -153,7 +212,7 @@ jobs:
           key: ${{ steps.dl.outputs.cache-primary-key }}
 
       - name: 保存编译缓存
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' && (steps.compile.outcome == 'success' || steps.collect.outputs.compile_complete == 'true') }}
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' && steps.prepare.outcome == 'success' }}
         uses: actions/cache/save@v4
         with:
           path: ~/ponwrt-ccache
@@ -173,15 +232,26 @@ jobs:
             --draft --target "$GITHUB_SHA" --title "$TAG" --notes "ponwrt @ $PONWRT_PIN; run $GITHUB_RUN_ID"
           gh release edit "$TAG" --draft=false --latest="$LATEST"
 
-      - name: 发布成功后回写正式设备版本
-        if: ${{ success() && inputs.make_release && !inputs.smoke_only && !inputs.packages_only && inputs.soc == 'an7581' && inputs.device_profile == 'nokia_xg-040g-md-ubi' }}
+  metadata:
+    needs: build
+    if: ${{ success() && inputs.make_release && !inputs.smoke_only && !inputs.packages_only }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ponwrt-*
+          path: published
+      - name: 汇总各机型正式版本
         run: |
+          python3 tools/publish-metadata.py published
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git fetch origin main
-          git checkout -B metadata-update origin/main
-          cp artifact/version.json version.json
-          git add version.json
+          git add versions version.json
           if ! git diff --cached --quiet; then
             git commit -m 'chore: publish verified firmware metadata [skip ci]'
             git push origin HEAD:main

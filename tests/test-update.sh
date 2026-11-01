@@ -19,6 +19,7 @@ export TEST_FILE=ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.i
 export TEST_URL="https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/releases/download/test/$TEST_FILE"
 curl() {
   echo fetch >> "$TMP_TEST/requests"
+  printf '%s\n' "$@" >> "$TMP_TEST/urls"
   [[ ${TEST_OFFLINE:-0} == 0 ]] || return 1
   local out=''
   while (( $# )); do
@@ -96,3 +97,12 @@ sh "$TMP_TEST/first-boot"
 sh "$TMP_TEST/first-boot"
 [[ $(grep -Fxc '17 * * * * /usr/bin/ponwrt-update-check --scheduled' "$TMP_TEST/crontabs/root") == 1 ]]
 grep -Fqx '7 3 * * * /usr/bin/other-task' "$TMP_TEST/crontabs/root"
+
+# An MF must only consult its own pointer, including on network failure.
+printf 'device=nokia_xg-040g-mf-ubi\ntarget=an7583\nbuilt=20261030-120000\n' > "$TMP_TEST/local"
+: > "$TMP_TEST/urls"
+TEST_OFFLINE=1 bash "$TMP_TEST/update.sh" --json > "$TMP_TEST/output"
+grep -q '"update":0,"error":"[^"].*"' "$TMP_TEST/output"
+grep -Fq '/versions/an7583/nokia_xg-040g-mf-ubi/version.json' "$TMP_TEST/urls"
+if grep -Fq '/releases/latest/' "$TMP_TEST/urls"; then exit 1; fi
+echo 'PASS: MF update channel is isolated from MD latest (mocked)'

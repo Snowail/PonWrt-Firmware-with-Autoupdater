@@ -1,4 +1,4 @@
-# PonWrt Firmware (Nokia XG-040G-MD / Airoha AN7581) with Autoupdater
+# PonWrt Firmware (Airoha AN7581 / AN7583) with Autoupdater
 
 本仓库用 GitHub Actions 自动构建 **pbs05/ponwrt** 固件（ImmortalWrt + Airoha AN7581/AN7583 的 PON 支持），
 并叠加了一套通用定制：Aurora 主题、简体中文、常用插件、固定 LAN 网段。
@@ -29,21 +29,28 @@
 | 用途 | 内置项目 |
 |---|---|
 | 界面、升级 | `luci-theme-aurora`、LuCI 简体中文、`luci-compat`、`luci-app-ponwrt-update`、`curl`、`jsonfilter`、`ca-bundle` |
-| DNS | `adguardhome`、`luci-app-adguardhome`、`smartdns`、`luci-app-smartdns` |
-| 分流与公网服务 | `luci-app-openclash` 和 Mihomo ARM64 v1.19.33 核心、`lucky`、`luci-app-lucky`、`frpc`、`luci-app-frpc` |
+| DNS | `adguardhome`、`luci-app-adguardhome` |
+| 分流与公网服务 | `lucky`、`luci-app-lucky`、`frpc`、`luci-app-frpc` |
 | 域名、唤醒与 NAT | `luci-app-ddns`、`ddns-scripts`、`ddns-scripts-services`、`luci-app-wol`、`luci-app-upnp`、`miniupnpd-nftables` |
 | 远程组网 | `zerotier`、`luci-app-zerotier`、`tailscale`、`luci-app-tailscale-community`、`wireguard-tools`、`kmod-wireguard`、`luci-proto-wireguard` |
-| 带宽与监控 | `sqm-scripts`、`luci-app-sqm`、`luci-app-statistics`（collectd 系统和接口曲线）、`nlbwmon`、`luci-app-nlbwmon`（按终端统计） |
-| 文件与共享 | `luci-app-filemanager`、`openssh-sftp-server`、`samba4-server`、`luci-app-samba4` |
+| 带宽与监控 | `nlbwmon`、`luci-app-nlbwmon`（按终端统计） |
+| 文件与共享 | `openssh-sftp-server`、`samba4-server`、`luci-app-samba4` |
 | 诊断 | `iperf3`、`bind-dig`、`ethtool-full`、`htop` |
 
-全新安装默认关闭 AdGuard Home、OpenClash、SmartDNS、Lucky 和 UPnP。由用户在 LuCI 中选择是否启用。保留配置升级时沿用已保存的服务设置。完整固件的实际依赖与版本见该次 Release 附带的 `.manifest`。
+全新安装默认关闭 AdGuard Home、Lucky 和 UPnP。由用户在 LuCI 中选择是否启用。保留配置升级时沿用已保存的服务设置。完整固件的实际依赖与版本见该次 Release 附带的 `.manifest`。
 
 ## 三、已验证机型与构建方式
 
 本仓库已在 Nokia XG-040G-MD（AN7581、UBI 布局）上运行 #17 固件，并在该机上验证了新版 LuCI 页面及在线版本检查。对应的设备 profile 为 `nokia_xg-040g-md-ubi`。
 
-Actions 每次按一个 SoC 和一个设备 profile 构建。上游配置还列有其他设备，本项目的实机验证范围目前限于上述型号。
+Actions 支持按机型并行构建，每个机型使用独立 runner、缓存和 Artifact；最多同时运行 4 个机型，单个失败不取消其他机型。
+
+| 默认构建目录（`devices.json`） | SoC | 验证状态 |
+|---|---|---|
+| `nokia_xg-040g-md-ubi` | AN7581 | 已有固件实机验证；本次流程改动待 CI 验证 |
+| `nokia_xg-040g-mf-ubi` | AN7583 | 上游包含此 profile，首次构建与实机验证待完成 |
+
+仅支持上游配置中启用、且输出 sysupgrade/recovery `.itb` 的 profile。传统非 UBI 布局不在此发布流程支持范围。额外软件包较多，其他设备仍需核验闪存容量和设备启动情况。下方刷机及 PON 示例针对已验证的 Nokia MD，不应直接套用到其他机型。
 
 ## 四、获取与构建
 
@@ -69,20 +76,23 @@ Actions 每次按一个 SoC 和一个设备 profile 构建。上游配置还列�
 
 - `soc`：`an7581`（XG-040G-MD 及其它 AN7581 机型）；XG-040G-MF 用 `an7583`
 - `device_profile`：`nokia_xg-040g-md-ubi`
+- `targets`：留空使用上述单机型；填 `all` 并行构建 `devices.json` 中所有机型；也可填 `an7581:nokia_xg-040g-md-ubi,an7583:nokia_xg-040g-mf-ubi`（最多 8 个，重复或非法参数会在构建前拒绝）
 - `pin_commit`：留默认（`03c1345`）
 - `jobs`：`4`
 - `make_release`：需要发 Release 时勾上
 - `smoke_only`：只编到 toolchain + libffi + ucode 就停，用于快速验证（约 50–70 分钟）
 
-构建时间取决于 runner、网络与缓存；完整构建 #17 约耗时 103 分钟。仅构建指定设备的镜像，并保留上游的软件包选择。
+构建时间取决于 runner、网络与缓存；完整构建 #17 约耗时 103 分钟。每个 job 只构建一个指定设备的镜像，并保留上游的软件包选择。并行缩短多机型全部完成的等待时间，不会增加单个 runner 的算力。
 
 > 只有勾选 `make_release` 的构建才会发 Release；平时手动触发的构建只上传 **Artifact**（保留 30 天），在运行页面下载。
 
-`dl/` 和 ccache 分开缓存；下载完成后即使编译失败也保存下载缓存。源码和 feeds/主题版本通过 commit 与 `sources.lock.json` 固定。
+`dl/`、ccache 和工具链分别缓存。ccache 保留 4 GB 上限，使用编译器内容校验，后续编译失败也保存已积累缓存。工具链仅精确匹配上游 SHA、完整配置、构建脚本、锁定 feeds 和 runner/系统包版本时恢复；恢复后仍执行 make 依赖检查。工具链成功就保存，无需等待固件完成。Rust 等 `hostpkg` 不包含在工具链缓存中。
+
+缓存命中后的实际提速需通过后续 Actions 日志测量；首次构建仍需填充缓存。多机型缓存共用仓库配额，旧缓存可能被 GitHub 淘汰，未配置付费 runner 或提高付费存储限额。源码和 feeds/主题版本通过 commit 与 `sources.lock.json` 固定。
 
 ### 跟随上游更新
 
-Actions 的 **Check upstream PonWrt** 每 15 分钟检查一次 `pbs05/ponwrt` 默认分支，也可手动运行。发现新提交后，工作流锁定该 SHA，为 Nokia XG-040G-MD UBI 编译完整镜像并上传 Artifact。feeds 和主题沿用仓库锁定版本。若有构建正在排队或执行，监测会等到后续检查再选取最新提交。已记录的同一提交跳过重复构建；失败可在原运行中重试。验证 Artifact 后，可在手动构建中填入该 SHA 并勾选 `make_release` 发布正式版。
+Actions 的 **Check upstream PonWrt** 每 15 分钟检查一次 `pbs05/ponwrt` 默认分支，也可手动运行。发现新提交后，工作流锁定该 SHA，按 `devices.json` 为全部目录机型并行编译完整镜像并分别上传 Artifact。feeds 和主题沿用仓库锁定版本。若有构建正在排队或执行，监测会等到后续检查再选取最新提交。已记录的同一提交跳过重复构建；失败可在原运行中重试。验证 Artifact 后，可在手动构建中填入该 SHA 并勾选 `make_release` 发布正式版。
 
 完整编译使用 4 GB ccache。优先恢复同一上游提交的缓存，更新提交时可复用同 SoC 的缓存。
 
@@ -177,11 +187,11 @@ LuCI（`http://10.0.0.1`）→ 网络 → PON：
 | 刷写已下载固件 | 下载校验通过后可用。用户单独确认后再次校验本地镜像，再调用 `sysupgrade` 保留配置刷写。 |
 | 设置代理 | 保存代理地址到 `/etc/ponwrt-update.proxy` |
 
-版本信息来源优先 `raw.githubusercontent.com/<repo>/main/version.json`，失败时回退到 Release 资产；配置代理时先走代理、失败再直连。
+Nokia MD 保持原 `main/version.json` 更新入口，失败时回退到 latest Release 资产。其他机型读取 `main/versions/<soc>/<profile>/version.json`，不回退到 Nokia MD 的 latest；各机型的元数据提供固定 Release 下载地址。配置代理时先走代理、失败再直连。
 
 设备的 cron 每小时第 17 分核对是否到期。没有成功记录时进行首次检查，之后从最近一次成功检查开始计时。断网时保留上次成功结果，下一小时重试。发现与本机匹配的新固件后，登录 LuCI 的用户会看到可打开“备份与更新”的横幅。已打开的页面每分钟刷新本地提示，安装固件仍需手动确认。
 
-普通构建仅上传 Artifact；正式设备 Release 发布成功后才更新 main/version.json。其它机型不会替换正式设备 latest。插件包提供后端和 ACL，页面仍集成在原“备份/升级”入口。
+普通构建仅上传 Artifact；所选机型全部成功发布 Release 后，由一个汇总 job 写入各机型版本索引，其中 Nokia MD 同步更新 main/version.json。其它机型不会替换 Nokia MD 的 latest。若部分机型失败，已成功的机型仍保留产物，但本轮不回写版本索引。插件包提供后端和 ACL，页面仍集成在原“备份/升级”入口。
 
 ## 八、已完成的工作
 
@@ -189,6 +199,8 @@ LuCI（`http://10.0.0.1`）→ 网络 → PON：
 - 页面快速测试通道可单独安装和回滚 LuCI 升级页，已有固件可以直接验证页面改动。[安装与回滚说明](fast-ui/README.md)
 - 更新后端支持手动检查、定时检查和登录提醒。测试机已成功查询正式发布版本。
 - 公版软件包清单已接入完整构建。上方表格列出构建选择；已发布镜像的实际软件包以该版 Release 的 manifest 为准。[公版首次 Release 构建记录](https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/actions/runs/41294150019)
+
+- 已加入多机型 matrix、精确匹配工具链缓存和各机型版本索引；待首次 CI 运行核验构建及缓存耗时。
 
 ## 九、致谢与许可
 

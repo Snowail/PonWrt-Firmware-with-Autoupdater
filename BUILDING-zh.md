@@ -29,13 +29,13 @@ Run #16 中三组 Kconfig 循环依赖仍出现，但此次没有阻止所选配
 ## 调整后的流程
 
 1. **预检**：校验 SoC、设备 profile、40 位源码 SHA、并发和模式组合；运行轻量回归测试。冒烟/只编包模式不能发布，发布只允许从 main 手动触发。
-2. **缓存**：下载缓存放 `~/ponwrt-dl`；编译缓存放 `~/ponwrt-ccache`，限制 2 GB。仅复用下载文件和 ccache，不缓存整个源码树或工具链目录。下载阶段已完成时，即使后续编译失败也保存下载缓存。
+2. **缓存**：下载缓存放 `~/ponwrt-dl`；编译缓存放 `~/ponwrt-ccache`，限制 4 GB，并按编译器内容校验。另对完整配置、上游/feeds、脚本和构建机版本精确匹配的 host/tools 与交叉工具链缓存；不缓存 hostpkg、内核或目标软件包目录。下载阶段已完成时，即使后续编译失败也保存下载缓存。
 3. **源码**：在新目录 shallow fetch 指定提交；`sources.lock.json` 固定 7 个 feeds 和 Aurora。每次检验实际 HEAD，并输出 `sources-resolved.json`。
 4. **插件**：先把插件复制进 `package/luci-app-ponwrt-update/`，再生成包元数据；验证上游 `package/Makefile` 未改。插件包安装后端脚本和 ACL，现有“备份/升级”页使用 `patch-flash.py` 集成面板，不安装旧的独立菜单/view。补丁缺少锚点或 Node 语法检查失败立即停止。
 5. **配置**：保留上游软件包选择，仅保留请求的设备 profile；启用 ccache、更新插件及依赖。`defconfig` 后检查包元数据、必需配置以及设备数量。必需项 MISS 立即失败，不在 defconfig 后强塞配置。
 6. **下载/编译**：各阶段直接记录详细日志。并行失败最多重试一次 `-j1 V=s`，不依赖 grep 提取目标，也不盲目 clean 内核。分别保留 make/tee 退出状态。下载即使返回零，只要末次日志仍报告 build failed 也拒绝进入编译。
 7. **产物**：精确匹配设备的 sysupgrade、recovery 镜像；核对上游 SHA256、profiles.json 的设备与哈希、manifest 中更新插件及依赖；再复制文件，生成 version.json 与只覆盖实际产物的 sha256sums。缺失产物即失败。
-8. **上传与发布**：失败仍上传诊断。完整成功且勾选 make_release 时，先上传为 draft Release，再发布；只有正式 AN7581 / Nokia MD UBI 发布成功才回写 main/version.json，并成为 latest。其它机型 Release 不改变正式设备的更新入口。失败不吞掉退出码。
+8. **上传与发布**：失败仍上传诊断。完整成功且勾选 make_release 时，先上传为 draft Release，再发布；所选机型全部发布成功后，汇总 job 一次性回写 versions/<soc>/<profile>/version.json；Nokia MD 同步回写 main/version.json，并成为 latest。其它机型 Release 不改变 Nokia MD 的更新入口。失败不吞掉退出码。
 
 version.json 增加固定 Release tag 的 `download_url`。新后端优先使用此 URL，验证机型、文件名和 SHA256，并在刷写前执行 `sysupgrade -T`。旧的无 download_url 元数据仍可回退 latest。构建没有触碰任何设备；刷机路径的本地测试全部使用模拟命令。
 
@@ -54,7 +54,7 @@ version.json 增加固定 Release tag 的 `download_url`。新后端优先使用
 | smoke_only | false |
 | packages_only | false |
 
-完整构建步骤限时 325 分钟，Job 360 分钟，预留诊断上传时间。首次构建时间应实测，不承诺固定耗时。全局串行避免版本回写竞争；GitHub 并发队列不会保证保存无限多个待运行请求，避免连续重复点击。
+完整构建步骤限时 325 分钟，Job 360 分钟，预留诊断上传时间。首次构建时间应实测，不承诺固定耗时。工作流运行之间串行，每次运行内部按设备 matrix 并行（最多 4 个）；targets 留空保持单机型，all 读取 devices.json，或使用 soc:profile 逗号分隔列表；GitHub 并发队列不会保证保存无限多个待运行请求，避免连续重复点击。
 
 若失败，下载带 run ID 和 attempt 的 Artifact：
 
