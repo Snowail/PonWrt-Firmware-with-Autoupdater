@@ -3,7 +3,7 @@
 本仓库用 GitHub Actions 自动构建 **pbs05/ponwrt** 固件（ImmortalWrt + Airoha AN7581/AN7583 的 PON 支持），
 并叠加了一套通用定制：Aurora 主题、简体中文、常用插件、固定 LAN 网段。
 
-构建维护和故障排查请先阅读 [构建流程与验收记录](BUILDING-zh.md)。2026-10-31 的流程修复已通过本地回归，仍待 GitHub Actions 完整构建验收。
+[完整构建 #17](https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/actions/runs/41230731864) 已成功生成 Nokia MD UBI 镜像。只更新现有固件的在线更新插件和 LuCI 升级页时，选择 **Actions → Fast plugin and LuCI update**。[安装和回滚](fast-ui/README.md) · [完整构建流程](BUILDING-zh.md)
 
 ---
 

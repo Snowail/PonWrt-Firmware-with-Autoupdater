@@ -97,7 +97,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/ponwrt-dl
-          key: dl-v2-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: dl-v2-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-${{ inputs.device_profile }}-${{ hashFiles('build-ponwrt.sh', 'tools/prepare-config.py', 'package/**/Makefile') }}
           restore-keys: |
             dl-v2-${{ runner.os }}-${{ inputs.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-
             dl-v2-${{ runner.os }}-${{ inputs.soc }}-
@@ -141,7 +141,7 @@ jobs:
           if-no-files-found: error
 
       - name: 保存已完成下载缓存（编译失败时也保留）
-        if: ${{ !cancelled() && steps.dl.outcome == 'success' && steps.collect.outputs.download_complete == 'true' }}
+        if: ${{ !cancelled() && steps.dl.outcome == 'success' && steps.dl.outputs.cache-hit != 'true' && steps.collect.outputs.download_complete == 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/ponwrt-dl
