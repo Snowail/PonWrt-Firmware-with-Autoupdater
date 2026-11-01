@@ -42,11 +42,20 @@
 
 > 科学上网因性能不佳暂时未加入
 
-## 三、已验证机型与构建方式
+## 三、设备支持列表
 
-本仓库已在 Nokia XG-040G-MD（AN7581、UBI 布局）上运行 #17 固件，并在该机上验证了新版 LuCI 页面及在线版本检查。对应的设备 profile 为 `nokia_xg-040g-md-ubi`。
+当前构建覆盖以下 14 种设备型号及变体。
 
-每次完整构建读取指定上游提交的 `configs/an7581.config` 和 `configs/an7583.config`，为其中每个启用的 profile 创建独立并行任务。设备列表随上游更新。各任务分别校验 sysupgrade、上游列出的附加镜像、软件包清单和 SHA256。实机验证范围为 Nokia XG-040-MD (UBI)，下方刷机说明针对该机型。
+| 芯片 | 品牌 | 型号及变体 |
+| --- | --- | --- |
+| AN7581 | FiberHome | HG5382A、HG5585F-CT、HG5585F-CT-USB-SFP、HG5585F-CU、HG5585F-CU-USB-SFP |
+| AN7581 | Gemtek | XG2010G |
+| AN7581 | Nokia | XG-040G-MD-UBI、XG-040G-MD-UBI-USB-SFP、XG-040G-TF-UBI |
+| AN7581 | Unionman | UNG00A |
+| AN7581 | ZNXT | ZN504XG-D、ZN515XG-D |
+| AN7583 | Nokia | XG-040G-MF、XG-040G-MF-UBI |
+
+已实机验证 Nokia XG-040G-MD（UBI 版）。下方刷机说明适用于该版本。
 
 ## 四、首次使用
 
