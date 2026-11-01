@@ -212,11 +212,15 @@ for line in "${EXTRA_PACKAGES[@]}"; do
   if grep -Fxq "$line" .config; then echo "  OK   $line"; else echo "  MISS $line"; exit 1; fi
 done
 SELECTED="$(grep -Ec '^CONFIG_TARGET_DEVICE_.*_DEVICE_.*=y$' .config || true)"
-[ "$SELECTED" = 1 ] || { echo "!! 选中的机型数量异常: $SELECTED"; exit 1; }
-if ! grep -Fxq "CONFIG_TARGET_DEVICE_airoha_${SOC}_DEVICE_${DEV}=y" .config; then
-  echo "  !! 设备 ${DEV} 未启用，终止"; exit 1
+if [[ "$DEV" == all ]]; then
+  expected="$(grep -Ec "^CONFIG_TARGET_DEVICE_airoha_${SOC}_DEVICE_.*=y$" "configs/$SOC.config")"
+  [[ "$SELECTED" -eq "$expected" ]]
+  grep -qx CONFIG_IB=y .config
+  grep -qx CONFIG_IB_STANDALONE=y .config
+else
+  [[ "$SELECTED" -eq 1 ]]
+  grep -Fxq "CONFIG_TARGET_DEVICE_airoha_${SOC}_DEVICE_${DEV}=y" .config
 fi
-echo "  OK   设备 ${DEV}"
 
 # ---- 通用 uci-defaults（不含任何个人数据）----
 mkdir -p files/etc/uci-defaults
@@ -317,6 +321,12 @@ say "[6/7] 编译（-j${NJOBS}）"
 cp "$REPO_DIR/tools/99-ponwrt-service-defaults" files/etc/uci-defaults/
 run_make world
 touch "$DIAG_DIR/compile.ok"
+
+if [[ "$DEV" == all ]]; then
+  python3 "$REPO_DIR/tools/export-imagebuilder.py" "$SRC_DIR" "$HOME/base" "$SOC" "$PIN"
+  say "Image Builder 基础产物已导出"
+  exit 0
+fi
 
 # ============================================================ 7. 产物
 say "[7/7] 收集产物"

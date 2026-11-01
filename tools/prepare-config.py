@@ -7,15 +7,19 @@ from pathlib import Path
 
 def prepare(text, soc, device, extras):
     symbol = f"CONFIG_TARGET_DEVICE_airoha_{soc}_DEVICE_{device}"
-    if f"{symbol}=y" not in text.splitlines():
+    if device != "all" and f"{symbol}=y" not in text.splitlines():
         raise ValueError(f"Device not enabled in upstream configs/{soc}.config: {device}")
     overrides = dict(line.split("=", 1) for line in extras)
-    overrides.update({symbol: "y", "CONFIG_CCACHE": "y", "CONFIG_DEVEL": "y"})
+    overrides.update({"CONFIG_CCACHE": "y", "CONFIG_DEVEL": "y"})
+    if device == "all":
+        overrides.update({"CONFIG_IB": "y", "CONFIG_IB_STANDALONE": "y"})
+    else:
+        overrides[symbol] = "y"
     result = []
     for line in text.splitlines():
         match = re.match(r"(?:# )?(CONFIG_[^ =]+)(?:=| is not set)", line)
         key = match[1] if match else None
-        if key and key.startswith("CONFIG_TARGET_DEVICE_") and "_DEVICE_" in key:
+        if device != "all" and key and key.startswith("CONFIG_TARGET_DEVICE_") and "_DEVICE_" in key:
             if key.startswith("CONFIG_TARGET_DEVICE_PACKAGES_"):
                 if key != f"CONFIG_TARGET_DEVICE_PACKAGES_airoha_{soc}_DEVICE_{device}":
                     continue

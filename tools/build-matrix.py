@@ -30,6 +30,8 @@ if __name__ == "__main__":
                              if f'{target["soc"]} / {target["device"]}' not in succeeded]
         if not result["include"]:
             raise ValueError("All profiles already succeeded")
+    bases = {"include": [{"soc": soc} for soc in sorted({t["soc"] for t in result["include"]})]}
     print("Building", len(result["include"]), "profiles:", result["include"])
     with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+        stream.write("bases=" + json.dumps(bases, separators=(",", ":")) + "\n")
         stream.write("matrix=" + json.dumps(result, separators=(",", ":")) + "\n")

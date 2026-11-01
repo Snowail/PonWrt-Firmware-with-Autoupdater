@@ -44,6 +44,8 @@
 
 ## 三、设备支持列表
 
+全部机型使用 Image Builder 生成日常升级镜像；基础编译另附 recovery 镜像。
+
 | SoC | 设备 | Profile | 原厂校准/身份数据分区 |
 | --- | --- | --- | --- |
 | AN7581 | FiberHome HG5382A | `fiberhome_hg5382a` | `factory` |

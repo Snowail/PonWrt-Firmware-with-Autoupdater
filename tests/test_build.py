@@ -43,6 +43,17 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             prepare("", "an7581", "wrong", [])
 
+    def test_imagebuilder_base_keeps_all_enabled_devices(self):
+        devices = ["first", "second"]
+        config = "\n".join(f"CONFIG_TARGET_DEVICE_airoha_an7583_DEVICE_{d}=y" for d in devices)
+        config += '\n# CONFIG_DEVEL is not set\n'
+        result = prepare(config, "an7583", "all", [])
+        for device in devices:
+            self.assertIn(f"CONFIG_TARGET_DEVICE_airoha_an7583_DEVICE_{device}=y", result)
+        for setting in ("CONFIG_IB=y", "CONFIG_IB_STANDALONE=y", "CONFIG_DEVEL=y", "CONFIG_CCACHE=y"):
+            self.assertIn(setting, result)
+        self.assertNotIn("DEVICE_all=y", result)
+
 
 class ArtifactTests(unittest.TestCase):
     def setUp(self):
@@ -78,6 +89,12 @@ class ArtifactTests(unittest.TestCase):
         for line in (self.out / "sha256sums").read_text().splitlines():
             expected, name = line.split("  ")
             self.assertEqual(expected, hashlib.sha256((self.out / name).read_bytes()).hexdigest())
+
+    def test_imagebuilder_accepts_sysupgrade_without_initramfs(self):
+        (self.binary / f"{PREFIX}-initramfs-recovery.itb").unlink()
+        collect("imagebuilder", self.source, self.out, "an7581", DEVICE)
+        self.assertTrue((self.out / f"{PREFIX}-squashfs-sysupgrade.itb").exists())
+        self.assertFalse((self.out / f"{PREFIX}-initramfs-recovery.itb").exists())
 
     def test_target_manifest_layout_from_run16(self):
         # The pinned upstream's Image/Manifest writes this target-level name.

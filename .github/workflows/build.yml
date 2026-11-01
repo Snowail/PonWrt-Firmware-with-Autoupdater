@@ -1,5 +1,5 @@
 name: Build ponwrt firmware
-run-name: ${{ inputs.make_release && 'Release' || inputs.smoke_only && 'Smoke' || inputs.packages_only && 'Packages' || 'Firmware' }} all @ ${{ inputs.pin_commit }}
+run-name: ${{ inputs.make_release && 'Release' || 'Firmware' }} all @ ${{ inputs.pin_commit }}
 
 on:
   workflow_dispatch:
@@ -22,14 +22,6 @@ on:
         description: '完整构建校验通过后发布 Release（首次诊断请关闭）'
         default: false
         type: boolean
-      smoke_only:
-        description: '仅验证工具链、libffi、ucode；不能发布'
-        default: false
-        type: boolean
-      packages_only:
-        description: '仅编译更新后端、curl、jsonfilter；不能发布'
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -47,6 +39,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
+      bases: ${{ steps.targets.outputs.bases }}
     steps:
       - uses: actions/checkout@v4
       - name: Read target configs from the pinned upstream revision
@@ -71,12 +64,12 @@ jobs:
       - id: targets
         run: python3 tools/build-matrix.py
 
-  build:
+  base:
     needs: plan
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
-    name: ${{ matrix.soc }} / ${{ matrix.device }}
+      matrix: ${{ fromJSON(needs.plan.outputs.bases) }}
+    name: Base / ${{ matrix.soc }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     permissions:
@@ -86,11 +79,11 @@ jobs:
         shell: bash
     env:
       PONWRT_SOC: ${{ matrix.soc }}
-      PONWRT_DEVICE: ${{ matrix.device }}
+      PONWRT_DEVICE: all
       PONWRT_PIN: ${{ inputs.pin_commit }}
       PONWRT_JOBS: ${{ inputs.jobs }}
-      PONWRT_SMOKE: ${{ inputs.smoke_only && '1' || '0' }}
-      PONWRT_PKGS: ${{ inputs.packages_only && '1' || '0' }}
+      PONWRT_SMOKE: '0'
+      PONWRT_PKGS: '0'
       PONWRT_DL: /home/runner/ponwrt-dl
       DIAG_DIR: /home/runner/ponwrt-diagnostics
       CCACHE_COMPILERCHECK: content
@@ -100,7 +93,14 @@ jobs:
       - name: 取出构建脚本
         uses: actions/checkout@v4
         with:
-          persist-credentials: ${{ inputs.make_release }}
+          persist-credentials: false
+
+      - name: 恢复完整 Image Builder 基础产物
+        id: bundle
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/base
+          key: ib-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json', 'build-ponwrt.sh', 'public-packages.txt', 'package/**', 'overlay/**', 'tools/prepare-config.py', 'tools/source-lock.py', 'tools/patch-flash.py', 'tools/ponwrt-banner.ut', 'tools/99-ponwrt-service-defaults', 'tools/build-lib.sh', 'tools/export-imagebuilder.py') }}
 
       - name: 参数与脚本预检
         env:
@@ -121,6 +121,7 @@ jobs:
           node tests/test-notice.js
 
       - name: 释放磁盘空间
+        if: steps.bundle.outputs.cache-hit != 'true'
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /opt/hostedtoolcache/CodeQL /usr/local/share/boost
@@ -128,6 +129,7 @@ jobs:
           df -h /
 
       - name: 恢复下载缓存
+        if: steps.bundle.outputs.cache-hit != 'true'
         id: dl
         uses: actions/cache/restore@v4
         with:
@@ -138,6 +140,7 @@ jobs:
             dl-v3-${{ runner.os }}-${{ matrix.soc }}-
 
       - name: 恢复编译缓存
+        if: steps.bundle.outputs.cache-hit != 'true'
         id: ccache
         uses: actions/cache/restore@v4
         with:
@@ -148,12 +151,14 @@ jobs:
             cc-v3-${{ runner.os }}-${{ matrix.soc }}-
 
       - name: 准备源码、配置与下载
+        if: steps.bundle.outputs.cache-hit != 'true'
         id: prepare
         env:
           PONWRT_STAGE: prepare
         run: bash build-ponwrt.sh
 
       - name: 恢复工具链缓存（精确配置匹配）
+        if: steps.bundle.outputs.cache-hit != 'true'
         id: toolchain
         uses: actions/cache/restore@v4
         with:
@@ -162,16 +167,17 @@ jobs:
             ~/ponwrt/staging_dir/toolchain-*
             ~/ponwrt/build_dir/host
             ~/ponwrt/build_dir/toolchain-*
-          key: tc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.soc }}-${{ matrix.device }}-${{ steps.prepare.outputs.toolchain_key }}
+          key: tc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.soc }}-all-${{ steps.prepare.outputs.toolchain_key }}
 
       - name: 检查并完成工具链
+        if: steps.bundle.outputs.cache-hit != 'true'
         id: tools
         env:
           PONWRT_STAGE: toolchain
         run: bash build-ponwrt.sh
 
       - name: 保存完整工具链（不等待固件成功）
-        if: steps.toolchain.outputs.cache-hit != 'true'
+        if: steps.bundle.outputs.cache-hit != 'true' && steps.tools.outcome == 'success' && steps.toolchain.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -182,6 +188,7 @@ jobs:
           key: ${{ steps.toolchain.outputs.cache-primary-key }}
 
       - name: 编译与产物校验
+        if: steps.bundle.outputs.cache-hit != 'true'
         id: compile
         timeout-minutes: 325
         env:
@@ -200,32 +207,91 @@ jobs:
           if [[ -f "$DIAG_DIR/download.ok" ]]; then echo 'download_complete=true' >> "$GITHUB_OUTPUT"; fi
           if [[ -f "$DIAG_DIR/compile.ok" ]]; then echo 'compile_complete=true' >> "$GITHUB_OUTPUT"; fi
 
-      - name: 上传 Artifact
+      - name: 保存完整基础产物
+        if: steps.bundle.outputs.cache-hit != 'true' && steps.compile.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/base
+          key: ${{ steps.bundle.outputs.cache-primary-key }}
+
+      - name: 上传 Image Builder 基础产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: imagebuilder-${{ matrix.soc }}
+          path: ~/base/
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: 上传基础编译诊断
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ponwrt-${{ matrix.device }}-${{ matrix.soc }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: base-diagnostics-${{ matrix.soc }}
           path: artifact/
           include-hidden-files: true
-          retention-days: 30
-          if-no-files-found: error
+          retention-days: 14
 
       - name: 保存已完成下载缓存（编译失败时也保留）
-        if: ${{ !cancelled() && matrix.cache_writer && steps.dl.outcome == 'success' && steps.dl.outputs.cache-hit != 'true' && steps.collect.outputs.download_complete == 'true' }}
+        if: ${{ !cancelled() && steps.dl.outcome == 'success' && steps.dl.outputs.cache-hit != 'true' && steps.collect.outputs.download_complete == 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/ponwrt-dl
           key: ${{ steps.dl.outputs.cache-primary-key }}
 
       - name: 保存编译缓存
-        if: ${{ !cancelled() && matrix.cache_writer && steps.ccache.outcome == 'success' && steps.prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' && steps.prepare.outcome == 'success' }}
         uses: actions/cache/save@v4
         with:
           path: ~/ponwrt-ccache
           key: ${{ steps.ccache.outputs.cache-primary-key }}
 
+  build:
+    needs: [plan, base]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.soc }} / ${{ matrix.device }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      PONWRT_SOC: ${{ matrix.soc }}
+      PONWRT_DEVICE: ${{ matrix.device }}
+      PONWRT_PIN: ${{ inputs.pin_commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: imagebuilder-${{ matrix.soc }}
+          path: ~/base
+      - name: 安装组装依赖
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends build-essential libncurses-dev zlib1g-dev libssl-dev gawk gettext rsync unzip zstd file python3
+      - name: Image Builder 组装与校验
+        run: |
+          set -o pipefail
+          bash tools/assemble-image.sh 2>&1 | tee imagebuilder.log
+      - name: 收集产物与日志
+        if: always()
+        run: |
+          mkdir -p artifact/diagnostics
+          if [[ -d "$HOME/out" ]]; then cp -a "$HOME/out/." artifact/; fi
+          if [[ -f imagebuilder.log ]]; then cp imagebuilder.log artifact/diagnostics/; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ponwrt-${{ matrix.device }}-${{ matrix.soc }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifact/
+          retention-days: 30
+          if-no-files-found: error
       - name: 发布完整 Release
-        if: ${{ success() && inputs.make_release && !inputs.smoke_only && !inputs.packages_only }}
+        if: ${{ success() && inputs.make_release }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -239,9 +305,10 @@ jobs:
             --draft --target "$GITHUB_SHA" --title "$TAG" --notes "ponwrt @ $PONWRT_PIN; run $GITHUB_RUN_ID"
           gh release edit "$TAG" --draft=false --latest="$LATEST"
 
+
   metadata:
     needs: build
-    if: ${{ success() && inputs.make_release && !inputs.smoke_only && !inputs.packages_only }}
+    if: ${{ success() && inputs.make_release }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

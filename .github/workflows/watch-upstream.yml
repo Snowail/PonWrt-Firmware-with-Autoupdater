@@ -45,5 +45,5 @@ jobs:
             exit 0
           fi
           gh workflow run build.yml --ref main -f pin_commit="$pin" \
-            -f jobs=4 -f make_release=false -f smoke_only=false -f packages_only=false
+            -f jobs=4 -f make_release=false
           echo "已触发 上游启用的全部机型的并行 Artifact 构建：$pin" >> "$GITHUB_STEP_SUMMARY"

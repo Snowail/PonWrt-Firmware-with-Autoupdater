@@ -28,7 +28,7 @@ def collect(mode, source, output, soc, device):
                 raise ValueError(f"Expected one {name} package, found {matches}")
             files.extend(matches)
         metadata = None
-    elif mode == "firmware":
+    elif mode in ("firmware", "imagebuilder"):
         binary = source / "bin/targets/airoha" / soc
         prefix = f"ponwrt-airoha-{soc}-{device}"
         profiles = json.loads((binary / "profiles.json").read_text())
@@ -39,9 +39,11 @@ def collect(mode, source, output, soc, device):
         if len(candidates) != 1:
             raise ValueError(f"Missing image or ambiguous sysupgrade: {device}")
         images = [binary / candidates[0]]
-        if candidates[0].endswith(".itb"):
+        if mode == "firmware" and candidates[0].endswith(".itb"):
             images.append(binary / f"{prefix}-initramfs-recovery.itb")
         for name in names:
+            if mode == "imagebuilder" and "initramfs" in name:
+                continue
             if (name.startswith(prefix + "-") and re.fullmatch(r"[a-zA-Z0-9_.-]+\.(bin|itb)", name)
                     and binary / name not in images):
                 images.append(binary / name)
