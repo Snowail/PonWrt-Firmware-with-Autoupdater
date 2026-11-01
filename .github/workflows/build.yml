@@ -9,6 +9,10 @@ on:
         required: true
         default: 03c134544714617e196dd399c85ebb90fb6eefa1
         type: string
+      retry_run:
+        description: '仅补跑此运行中未成功的机型，留空构建全部机型'
+        default: ''
+        type: string
       jobs:
         description: 'make -j，默认 4'
         required: true
@@ -37,6 +41,9 @@ concurrency:
 
 jobs:
   plan:
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
@@ -51,6 +58,16 @@ jobs:
           for soc in an7581 an7583; do
             curl -fsSL --retry 3 "https://raw.githubusercontent.com/pbs05/ponwrt/$PIN/configs/$soc.config" -o "upstream/configs/$soc.config"
           done
+      - name: 读取待补跑任务
+        if: inputs.retry_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RETRY_RUN: ${{ inputs.retry_run }}
+        run: |
+          [[ "$RETRY_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RETRY_RUN" > retry-run.json
+          python3 -c 'import json,os; r=json.load(open("retry-run.json")); assert r["path"] == ".github/workflows/build.yml" and r["status"] == "completed"'
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$RETRY_RUN/jobs?filter=latest&per_page=100" > retry-jobs.json
       - id: targets
         run: python3 tools/build-matrix.py
 

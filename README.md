@@ -44,18 +44,20 @@
 
 ## 三、设备支持列表
 
-当前构建覆盖以下 14 种设备型号及变体。
+| SoC | 设备 | Profile | 原厂校准/身份数据分区 |
+| --- | --- | --- | --- |
+| AN7581 | FiberHome HG5382A | `fiberhome_hg5382a` | `factory` |
+| AN7581 | FiberHome HG5585F CT | `fiberhome_hg5585f-ct` | `factory` |
+| AN7581 | FiberHome HG5585F CU | `fiberhome_hg5585f-cu` | `factory` |
+| AN7581 | Gemtek XG2010G | `gemtek_xg2010g` | `dsd` |
+| AN7581 | Nokia XG-040G-MD UBI | `nokia_xg-040g-md-ubi` | `bosa`、`ri` |
+| AN7581 | Nokia XG-040G-TF UBI | `nokia_xg-040g-tf-ubi` | `bosa`、`ri` |
+| AN7581 | UnionMan UNG00A | `unionman_ung00a` | `reservearea` |
+| AN7581 | ZNXT ZN504XG-D | `znxt_zn504xg-d` | `reservearea` |
+| AN7581 | ZNXT ZN515XG-D | `znxt_zn515xg-d` | `reservearea` |
+| AN7583 | Nokia XG-040G-MF | `nokia_xg-040g-mf`、`nokia_xg-040g-mf-ubi` | `bosa`、`ri` |
 
-| 芯片 | 品牌 | 型号及变体 |
-| --- | --- | --- |
-| AN7581 | FiberHome | HG5382A、HG5585F-CT、HG5585F-CT-USB-SFP、HG5585F-CU、HG5585F-CU-USB-SFP |
-| AN7581 | Gemtek | XG2010G |
-| AN7581 | Nokia | XG-040G-MD-UBI、XG-040G-MD-UBI-USB-SFP、XG-040G-TF-UBI |
-| AN7581 | Unionman | UNG00A |
-| AN7581 | ZNXT | ZN504XG-D、ZN515XG-D |
-| AN7583 | Nokia | XG-040G-MF、XG-040G-MF-UBI |
-
-已实机验证 Nokia XG-040G-MD（UBI 版）。下方刷机说明适用于该版本。
+设备列表来自 [pbs05/ponwrt](https://github.com/pbs05/ponwrt/blob/master/README_zh.md)。已实机验证 Nokia XG-040G-MD（UBI 版）。下方刷机说明适用于该版本。
 
 ## 四、首次使用
 

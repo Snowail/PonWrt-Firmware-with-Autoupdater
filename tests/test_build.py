@@ -35,6 +35,8 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn("usb-sfp", result)
         self.assertIn("CONFIG_PACKAGE_kmod-pon=y", result)
         self.assertIn("CONFIG_PACKAGE_curl=y", result)
+        self.assertIn("CONFIG_DEVEL=y", result)
+        self.assertIn("CONFIG_CCACHE=y", result)
         self.assertNotIn("# CONFIG_PACKAGE_curl", result)
 
     def test_unknown_device_rejected(self):

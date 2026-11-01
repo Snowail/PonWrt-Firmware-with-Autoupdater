@@ -22,6 +22,14 @@ if __name__ == "__main__":
     configs = {soc: Path(f"upstream/configs/{soc}.config").read_text()
                for soc in ("an7581", "an7583")}
     result = matrix(configs)
+    if Path("retry-jobs.json").exists():
+        pages = json.loads(Path("retry-jobs.json").read_text())
+        succeeded = {job["name"] for page in pages for job in page["jobs"]
+                     if job["conclusion"] == "success"}
+        result["include"] = [target for target in result["include"]
+                             if f'{target["soc"]} / {target["device"]}' not in succeeded]
+        if not result["include"]:
+            raise ValueError("All profiles already succeeded")
     print("Building", len(result["include"]), "profiles:", result["include"])
     with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
         stream.write("matrix=" + json.dumps(result, separators=(",", ":")) + "\n")

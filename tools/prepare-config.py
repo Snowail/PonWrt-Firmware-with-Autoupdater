@@ -10,7 +10,7 @@ def prepare(text, soc, device, extras):
     if f"{symbol}=y" not in text.splitlines():
         raise ValueError(f"Device not enabled in upstream configs/{soc}.config: {device}")
     overrides = dict(line.split("=", 1) for line in extras)
-    overrides.update({symbol: "y", "CONFIG_CCACHE": "y"})
+    overrides.update({symbol: "y", "CONFIG_CCACHE": "y", "CONFIG_DEVEL": "y"})
     result = []
     for line in text.splitlines():
         match = re.match(r"(?:# )?(CONFIG_[^ =]+)(?:=| is not set)", line)
