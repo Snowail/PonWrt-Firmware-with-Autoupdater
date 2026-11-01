@@ -161,7 +161,7 @@
 
 - 已加入多机型 matrix、精确匹配工具链缓存和各机型版本索引；待首次 CI 运行核验构建及缓存耗时。
 
-## 九、致谢与许可
+## 七、致谢与许可
 
 - PON 驱动与固件基础：[pbs05/ponwrt](https://github.com/pbs05/ponwrt)
 - Web U-Boot 与刷机方案：[Loong1996/ImmortalWrt-Airoha](https://github.com/Loong1996/ImmortalWrt-Airoha)
