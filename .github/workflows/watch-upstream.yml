@@ -33,7 +33,6 @@ jobs:
             echo "上游与当前正式版一致：$pin" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          device=nokia_xg-040g-md-ubi
           targets=all
           runs=$(gh api --paginate "repos/$GH_REPO/actions/workflows/build.yml/runs?branch=main&event=workflow_dispatch&per_page=100" \
             --jq '.workflow_runs[] | [.display_title, .status] | @tsv')
@@ -45,6 +44,6 @@ jobs:
             echo "已有构建在运行或排队，下次检查时再处理 $pin。" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          gh workflow run build.yml --ref main -f pin_commit="$pin" -f soc=an7581 \
-            -f device_profile="$device" -f targets="$targets" -f jobs=4 -f make_release=false -f smoke_only=false -f packages_only=false
-          echo "已触发 devices.json 全部机型的并行 Artifact 构建：$pin" >> "$GITHUB_STEP_SUMMARY"
+          gh workflow run build.yml --ref main -f pin_commit="$pin" \
+            -f jobs=4 -f make_release=false -f smoke_only=false -f packages_only=false
+          echo "已触发 上游启用的全部机型的并行 Artifact 构建：$pin" >> "$GITHUB_STEP_SUMMARY"

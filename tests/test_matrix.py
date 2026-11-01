@@ -19,18 +19,12 @@ publish = module("publish-metadata").publish
 
 
 class MatrixTests(unittest.TestCase):
-    def test_single_and_all(self):
-        catalog = json.loads((ROOT / "devices.json").read_text())
-        self.assertEqual(matrix("all", "", "", catalog)["include"], catalog)
-        self.assertEqual(matrix("", "an7581", "test", catalog)["include"],
-                         [{"soc": "an7581", "device": "test"}])
-
-    def test_multiple_and_invalid(self):
-        self.assertEqual(len(matrix("an7581:md, an7583:mf", "", "", [])["include"]), 2)
-        for selection in ("an7581:md,an7581:md", "an7582:md", "an7581:../../x",
-                          "bad", "an7581:md,", ",".join("an7581:d" + str(i) for i in range(9))):
-            with self.assertRaises(ValueError):
-                matrix(selection, "", "", [])
+    def test_all_enabled_profiles_across_targets(self):
+        configs = {soc: "\n".join(f"CONFIG_TARGET_DEVICE_airoha_{soc}_DEVICE_test-{i}=y"
+                                  for i in range(10)) for soc in ("an7581", "an7583")}
+        self.assertEqual(len(matrix(configs)["include"]), 20)
+        with self.assertRaises(ValueError):
+            matrix({"an7583": "# no devices"})
 
     def test_metadata_channels_are_independent(self):
         with tempfile.TemporaryDirectory() as tmp:

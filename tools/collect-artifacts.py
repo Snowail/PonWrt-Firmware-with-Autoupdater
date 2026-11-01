@@ -31,7 +31,20 @@ def collect(mode, source, output, soc, device):
     elif mode == "firmware":
         binary = source / "bin/targets/airoha" / soc
         prefix = f"ponwrt-airoha-{soc}-{device}"
-        images = [binary / f"{prefix}-{suffix}.itb" for suffix in ("squashfs-sysupgrade", "initramfs-recovery")]
+        profiles = json.loads((binary / "profiles.json").read_text())
+        profile = profiles["profiles"][device]
+        sysupgrade = f"{prefix}-squashfs-sysupgrade"
+        names = [image["name"] for image in profile["images"]]
+        candidates = [name for name in names if name in (sysupgrade + ".bin", sysupgrade + ".itb")]
+        if len(candidates) != 1:
+            raise ValueError(f"Missing image or ambiguous sysupgrade: {device}")
+        images = [binary / candidates[0]]
+        if candidates[0].endswith(".itb"):
+            images.append(binary / f"{prefix}-initramfs-recovery.itb")
+        for name in names:
+            if (name.startswith(prefix + "-") and re.fullmatch(r"[a-zA-Z0-9_.-]+\.(bin|itb)", name)
+                    and binary / name not in images):
+                images.append(binary / name)
         checksums = {}
         for line in (binary / "sha256sums").read_text().splitlines():
             match = re.fullmatch(r"([0-9a-f]{64})\s+\*?(.+)", line)
@@ -42,8 +55,6 @@ def collect(mode, source, output, soc, device):
                 raise ValueError(f"Missing image: {path.name}")
             if checksums.get(path.name) != digest(path):
                 raise ValueError(f"SHA256 mismatch: {path.name}")
-        profiles = json.loads((binary / "profiles.json").read_text())
-        profile = profiles["profiles"][device]
         manifest = binary / f"{prefix}.manifest"
         if not manifest.is_file():
             # Multi-profile OpenWrt writes IMG_PREFIX.manifest without a device

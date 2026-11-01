@@ -126,7 +126,8 @@ if fetch "$RAW?t=$(date +%s)" "$TMPJ" || fetch "$RAW" "$TMPJ" || \
     lurl="$(jsonfilter -i "$TMPJ" -e '@.download_url' 2>/dev/null)"
     [ -n "$latest" ] || err="version.json 解析失败"
     if [ -z "$cur_device" ] || [ -z "$cur_target" ] || [ "$ldevice" != "$cur_device" ] || \
-       [ "$lfile" != "ponwrt-airoha-${cur_target}-${cur_device}-squashfs-sysupgrade.itb" ]; then
+       { [ "$lfile" != "ponwrt-airoha-${cur_target}-${cur_device}-squashfs-sysupgrade.itb" ] &&
+         [ "$lfile" != "ponwrt-airoha-${cur_target}-${cur_device}-squashfs-sysupgrade.bin" ]; }; then
         err="固件机型与当前设备不匹配"
     fi
     if ! printf '%s\n' "$lsha" | grep -Eq '^[0-9a-f]{64}$'; then err="固件校验信息无效"; fi

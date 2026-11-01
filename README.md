@@ -3,7 +3,7 @@
 本仓库用 GitHub Actions 自动构建 **pbs05/ponwrt** 固件（ImmortalWrt + Airoha AN7581/AN7583 的 PON 支持），
 并叠加了一套通用定制：Aurora 主题、简体中文、常用插件、固定 LAN 网段。
 
-[完整构建 #17](https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/actions/runs/41230731864) 已生成 Nokia MD UBI 镜像。在测试机验证“备份与更新”页面时，选择 **Actions → Test backup and update page**。快速包只替换页面。正式发布时，完整固件内置同一页面补丁。新增软件包随上游版本更新再编译。[页面测试与回滚](fast-ui/README.md) · [完整构建流程](BUILDING-zh.md)
+[完整构建 #17](https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/actions/runs/41230731864) 已生成 Nokia MD UBI 镜像。在测试机验证“备份与更新”页面时，选择 **Actions → Test backup and update page**。快速包只替换页面。正式发布时，完整固件内置同一页面补丁。新增软件包随上游版本更新再编译。[页面测试与回滚](fast-ui/README.md)
 
 ---
 
@@ -43,14 +43,7 @@
 
 本仓库已在 Nokia XG-040G-MD（AN7581、UBI 布局）上运行 #17 固件，并在该机上验证了新版 LuCI 页面及在线版本检查。对应的设备 profile 为 `nokia_xg-040g-md-ubi`。
 
-Actions 支持按机型并行构建，每个机型使用独立 runner、缓存和 Artifact；最多同时运行 4 个机型，单个失败不取消其他机型。
-
-| 默认构建目录（`devices.json`） | SoC | 验证状态 |
-|---|---|---|
-| `nokia_xg-040g-md-ubi` | AN7581 | 已有固件实机验证；本次流程改动待 CI 验证 |
-| `nokia_xg-040g-mf-ubi` | AN7583 | 上游包含此 profile，首次构建与实机验证待完成 |
-
-仅支持上游配置中启用、且输出 sysupgrade/recovery `.itb` 的 profile。传统非 UBI 布局不在此发布流程支持范围。额外软件包较多，其他设备仍需核验闪存容量和设备启动情况。下方刷机及 PON 示例针对已验证的 Nokia MD，不应直接套用到其他机型。
+每次完整构建读取指定上游提交的 `configs/an7581.config` 和 `configs/an7583.config`，为其中每个启用的 profile 创建独立并行任务。设备列表随上游更新。各任务分别校验 sysupgrade、上游列出的附加镜像、软件包清单和 SHA256。实机验证范围为 Nokia MD UBI，下方刷机说明针对该机型。
 
 ## 四、获取与构建
 
@@ -74,25 +67,22 @@ Actions 支持按机型并行构建，每个机型使用独立 runner、缓存�
 
 **Actions → Build ponwrt firmware → Run workflow**，参数：
 
-- `soc`：`an7581`（XG-040G-MD 及其它 AN7581 机型）；XG-040G-MF 用 `an7583`
-- `device_profile`：`nokia_xg-040g-md-ubi`
-- `targets`：留空使用上述单机型；填 `all` 并行构建 `devices.json` 中所有机型；也可填 `an7581:nokia_xg-040g-md-ubi,an7583:nokia_xg-040g-mf-ubi`（最多 8 个，重复或非法参数会在构建前拒绝）
 - `pin_commit`：留默认（`03c1345`）
 - `jobs`：`4`
 - `make_release`：需要发 Release 时勾上
 - `smoke_only`：只编到 toolchain + libffi + ucode 就停，用于快速验证（约 50–70 分钟）
 
-构建时间取决于 runner、网络与缓存；完整构建 #17 约耗时 103 分钟。每个 job 只构建一个指定设备的镜像，并保留上游的软件包选择。并行缩短多机型全部完成的等待时间，不会增加单个 runner 的算力。
+构建时间取决于 runner、网络与缓存；完整构建 #17 约耗时 103 分钟。每个 job 构建对应机型的镜像，并保留上游的软件包选择。并行缩短多机型全部完成的等待时间，不会增加单个 runner 的算力。
 
 > 只有勾选 `make_release` 的构建才会发 Release；平时手动触发的构建只上传 **Artifact**（保留 30 天），在运行页面下载。
 
 `dl/`、ccache 和工具链分别缓存。ccache 保留 4 GB 上限，使用编译器内容校验，后续编译失败也保存已积累缓存。工具链仅精确匹配上游 SHA、完整配置、构建脚本、锁定 feeds 和 runner/系统包版本时恢复；恢复后仍执行 make 依赖检查。工具链成功就保存，无需等待固件完成。Rust 等 `hostpkg` 不包含在工具链缓存中。
 
-缓存命中后的实际提速需通过后续 Actions 日志测量；首次构建仍需填充缓存。多机型缓存共用仓库配额，旧缓存可能被 GitHub 淘汰，未配置付费 runner 或提高付费存储限额。源码和 feeds/主题版本通过 commit 与 `sources.lock.json` 固定。
+缓存命中后的实际提速需通过后续 Actions 日志测量；首次构建仍需填充缓存。同一 SoC 的机型共享下载缓存和 ccache，由首个 profile 负责写入。多机型缓存共用仓库配额，旧缓存可能被 GitHub 淘汰，未配置付费 runner 或提高付费存储限额。源码和 feeds/主题版本通过 commit 与 `sources.lock.json` 固定。
 
 ### 跟随上游更新
 
-Actions 的 **Check upstream PonWrt** 每 15 分钟检查一次 `pbs05/ponwrt` 默认分支，也可手动运行。发现新提交后，工作流锁定该 SHA，按 `devices.json` 为全部目录机型并行编译完整镜像并分别上传 Artifact。feeds 和主题沿用仓库锁定版本。若有构建正在排队或执行，监测会等到后续检查再选取最新提交。已记录的同一提交跳过重复构建；失败可在原运行中重试。验证 Artifact 后，可在手动构建中填入该 SHA 并勾选 `make_release` 发布正式版。
+Actions 的 **Check upstream PonWrt** 每 15 分钟检查一次 `pbs05/ponwrt` 默认分支，也可手动运行。发现新提交后，工作流锁定该 SHA，按对应上游配置为全部启用机型并行编译完整镜像并分别上传 Artifact。feeds 和主题沿用仓库锁定版本。若有构建正在排队或执行，监测会等到后续检查再选取最新提交。已记录的同一提交跳过重复构建；失败可在原运行中重试。验证 Artifact 后，可在手动构建中填入该 SHA 并勾选 `make_release` 发布正式版。
 
 完整编译使用 4 GB ccache。优先恢复同一上游提交的缓存，更新提交时可复用同 SoC 的缓存。
 

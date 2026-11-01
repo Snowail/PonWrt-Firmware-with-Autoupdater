@@ -1,24 +1,9 @@
 name: Build ponwrt firmware
-run-name: ${{ inputs.make_release && 'Release' || inputs.smoke_only && 'Smoke' || inputs.packages_only && 'Packages' || 'Firmware' }} ${{ inputs.targets || inputs.device_profile }} @ ${{ inputs.pin_commit }}
+run-name: ${{ inputs.make_release && 'Release' || inputs.smoke_only && 'Smoke' || inputs.packages_only && 'Packages' || 'Firmware' }} all @ ${{ inputs.pin_commit }}
 
 on:
   workflow_dispatch:
     inputs:
-      soc:
-        description: 'SoC 目标'
-        required: true
-        default: an7581
-        type: choice
-        options: [an7581, an7583]
-      device_profile:
-        description: '设备 profile（只构建此机型）'
-        required: true
-        default: nokia_xg-040g-md-ubi
-        type: string
-      targets:
-        description: '并行目标：留空用上方单机型；all 用 devices.json；或 soc:profile 逗号分隔（最多 8 台）'
-        default: ''
-        type: string
       pin_commit:
         description: 'ponwrt 完整 commit SHA；feeds 和主题由 sources.lock.json 固定'
         required: true
@@ -57,18 +42,22 @@ jobs:
       matrix: ${{ steps.targets.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-      - id: targets
+      - name: Read target configs from the pinned upstream revision
         env:
-          TARGETS: ${{ inputs.targets }}
-          SOC: ${{ inputs.soc }}
-          DEVICE: ${{ inputs.device_profile }}
+          PIN: ${{ inputs.pin_commit }}
+        run: |
+          [[ "$PIN" =~ ^[0-9a-f]{40}$ ]]
+          mkdir -p upstream/configs
+          for soc in an7581 an7583; do
+            curl -fsSL --retry 3 "https://raw.githubusercontent.com/pbs05/ponwrt/$PIN/configs/$soc.config" -o "upstream/configs/$soc.config"
+          done
+      - id: targets
         run: python3 tools/build-matrix.py
 
   build:
     needs: plan
     strategy:
       fail-fast: false
-      max-parallel: 4
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     name: ${{ matrix.soc }} / ${{ matrix.device }}
     runs-on: ubuntu-24.04
@@ -126,20 +115,20 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/ponwrt-dl
-          key: dl-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-${{ hashFiles('public-packages.txt', 'build-ponwrt.sh', 'tools/prepare-config.py', 'package/**/Makefile') }}
+          key: dl-v3-${{ runner.os }}-${{ matrix.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-${{ hashFiles('public-packages.txt', 'build-ponwrt.sh', 'tools/prepare-config.py', 'package/**/Makefile') }}
           restore-keys: |
-            dl-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-
-            dl-v2-${{ runner.os }}-${{ matrix.soc }}-
+            dl-v3-${{ runner.os }}-${{ matrix.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json') }}-
+            dl-v3-${{ runner.os }}-${{ matrix.soc }}-
 
       - name: 恢复编译缓存
         id: ccache
         uses: actions/cache/restore@v4
         with:
           path: ~/ponwrt-ccache
-          key: cc-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json', 'build-ponwrt.sh', 'tools/**', 'package/**', 'overlay/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: cc-v3-${{ runner.os }}-${{ matrix.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json', 'build-ponwrt.sh', 'tools/**', 'package/**', 'overlay/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            cc-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-${{ inputs.pin_commit }}-
-            cc-v2-${{ runner.os }}-${{ matrix.soc }}-${{ matrix.device }}-
+            cc-v3-${{ runner.os }}-${{ matrix.soc }}-${{ inputs.pin_commit }}-
+            cc-v3-${{ runner.os }}-${{ matrix.soc }}-
 
       - name: 准备源码、配置与下载
         id: prepare
@@ -205,14 +194,14 @@ jobs:
           if-no-files-found: error
 
       - name: 保存已完成下载缓存（编译失败时也保留）
-        if: ${{ !cancelled() && steps.dl.outcome == 'success' && steps.dl.outputs.cache-hit != 'true' && steps.collect.outputs.download_complete == 'true' }}
+        if: ${{ !cancelled() && matrix.cache_writer && steps.dl.outcome == 'success' && steps.dl.outputs.cache-hit != 'true' && steps.collect.outputs.download_complete == 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/ponwrt-dl
           key: ${{ steps.dl.outputs.cache-primary-key }}
 
       - name: 保存编译缓存
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' && steps.prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.cache_writer && steps.ccache.outcome == 'success' && steps.prepare.outcome == 'success' }}
         uses: actions/cache/save@v4
         with:
           path: ~/ponwrt-ccache
@@ -228,7 +217,8 @@ jobs:
           TAG="$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')"
           LATEST=false
           if [[ "$PONWRT_SOC" == an7581 && "$PONWRT_DEVICE" == nokia_xg-040g-md-ubi ]]; then LATEST=true; fi
-          gh release create "$TAG" ./*.itb ./*.manifest sha256sums ponwrt-version version.json profiles.json \
+          shopt -s nullglob
+          gh release create "$TAG" ./*.bin ./*.itb ./*.manifest sha256sums ponwrt-version version.json profiles.json \
             --draft --target "$GITHUB_SHA" --title "$TAG" --notes "ponwrt @ $PONWRT_PIN; run $GITHUB_RUN_ID"
           gh release edit "$TAG" --draft=false --latest="$LATEST"
 
