@@ -46,6 +46,8 @@
 
 全部机型使用 Image Builder 生成日常升级镜像；基础编译另附 recovery 镜像。
 
+Actions 每天北京时间早上 8 点检查上游更新，发现新版本后自动构建全部机型。
+
 | SoC | 设备 | Profile | 原厂校准/身份数据分区 |
 | --- | --- | --- | --- |
 | AN7581 | FiberHome HG5382A | `fiberhome_hg5382a` | `factory` |
