@@ -1,11 +1,11 @@
 {
-  "version": "nokia_xg-040g-md-ubi-20261101-095629-41295171368-1",
+  "version": "nokia_xg-040g-md-ubi-20261102-100432-41425635838-1",
   "device": "nokia_xg-040g-md-ubi",
   "target": "an7581",
   "commit": "03c134544714617e196dd399c85ebb90fb6eefa1",
-  "built": "20261101-095629",
+  "built": "20261102-100432",
   "file": "ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb",
-  "sha256": "27192bfde362c3d5e6c0c9fbc6b62c0066fa7f93df7d7952051b0a7801249c1f",
+  "sha256": "91354ad08cb79de2bfdba32dcc79676b1866c701c1434130d113dc347d6a8bed",
   "notes": "automated build",
-  "download_url": "https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/releases/download/nokia_xg-040g-md-ubi-20261101-095629-41295171368-1/ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb"
+  "download_url": "https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/releases/download/nokia_xg-040g-md-ubi-20261102-100432-41425635838-1/ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb"
 }

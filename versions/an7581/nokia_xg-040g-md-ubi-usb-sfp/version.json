@@ -1,0 +1,11 @@
+{
+  "version": "nokia_xg-040g-md-ubi-usb-sfp-20261102-100612-41425635838-1",
+  "device": "nokia_xg-040g-md-ubi-usb-sfp",
+  "target": "an7581",
+  "commit": "03c134544714617e196dd399c85ebb90fb6eefa1",
+  "built": "20261102-100612",
+  "file": "ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-usb-sfp-squashfs-sysupgrade.itb",
+  "sha256": "aa5d7568cdb5975349247b07622669dd37ce54a517ecf8b39ff1202a9ccc1c59",
+  "notes": "automated build",
+  "download_url": "https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/releases/download/nokia_xg-040g-md-ubi-usb-sfp-20261102-100612-41425635838-1/ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-usb-sfp-squashfs-sysupgrade.itb"
+}

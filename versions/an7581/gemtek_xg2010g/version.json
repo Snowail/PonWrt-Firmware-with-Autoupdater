@@ -1,0 +1,11 @@
+{
+  "version": "gemtek_xg2010g-20261102-100432-41425635838-1",
+  "device": "gemtek_xg2010g",
+  "target": "an7581",
+  "commit": "03c134544714617e196dd399c85ebb90fb6eefa1",
+  "built": "20261102-100432",
+  "file": "ponwrt-airoha-an7581-gemtek_xg2010g-squashfs-sysupgrade.itb",
+  "sha256": "7bc908a4880c8627e14efd5340a6d0a080469e4283ffdd20c68adf3b9bf75fd8",
+  "notes": "automated build",
+  "download_url": "https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/releases/download/gemtek_xg2010g-20261102-100432-41425635838-1/ponwrt-airoha-an7581-gemtek_xg2010g-squashfs-sysupgrade.itb"
+}

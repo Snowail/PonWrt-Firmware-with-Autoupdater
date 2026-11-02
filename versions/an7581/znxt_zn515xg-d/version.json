@@ -1,0 +1,11 @@
+{
+  "version": "znxt_zn515xg-d-20261102-100512-41425635838-1",
+  "device": "znxt_zn515xg-d",
+  "target": "an7581",
+  "commit": "03c134544714617e196dd399c85ebb90fb6eefa1",
+  "built": "20261102-100512",
+  "file": "ponwrt-airoha-an7581-znxt_zn515xg-d-squashfs-sysupgrade.itb",
+  "sha256": "6ed1bc1ce9749746d57dcacf91fcf6946f35cb5324c2cc50ee1932ae931fbda0",
+  "notes": "automated build",
+  "download_url": "https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/releases/download/znxt_zn515xg-d-20261102-100512-41425635838-1/ponwrt-airoha-an7581-znxt_zn515xg-d-squashfs-sysupgrade.itb"
+}

@@ -1,0 +1,11 @@
+{
+  "version": "fiberhome_hg5585f-cu-20261102-100447-41425635838-1",
+  "device": "fiberhome_hg5585f-cu",
+  "target": "an7581",
+  "commit": "03c134544714617e196dd399c85ebb90fb6eefa1",
+  "built": "20261102-100447",
+  "file": "ponwrt-airoha-an7581-fiberhome_hg5585f-cu-squashfs-sysupgrade.itb",
+  "sha256": "4f3d00bc6013ee26c521592bc38e95d09f444c695db59333992aec731531f0af",
+  "notes": "automated build",
+  "download_url": "https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/releases/download/fiberhome_hg5585f-cu-20261102-100447-41425635838-1/ponwrt-airoha-an7581-fiberhome_hg5585f-cu-squashfs-sysupgrade.itb"
+}

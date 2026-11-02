@@ -1,0 +1,11 @@
+{
+  "version": "nokia_xg-040g-mf-20261102-100428-41425635838-1",
+  "device": "nokia_xg-040g-mf",
+  "target": "an7583",
+  "commit": "03c134544714617e196dd399c85ebb90fb6eefa1",
+  "built": "20261102-100428",
+  "file": "ponwrt-airoha-an7583-nokia_xg-040g-mf-squashfs-sysupgrade.bin",
+  "sha256": "e42b752cbaa5fe659740c0c0a458ceb72819de9e2fb63a9129c8a8c79c2ba3c5",
+  "notes": "automated build",
+  "download_url": "https://github.com/Snowail/PonWrt-Firmware-with-Autoupdater/releases/download/nokia_xg-040g-mf-20261102-100428-41425635838-1/ponwrt-airoha-an7583-nokia_xg-040g-mf-squashfs-sysupgrade.bin"
+}
