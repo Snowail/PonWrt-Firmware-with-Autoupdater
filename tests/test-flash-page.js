@@ -79,7 +79,8 @@ async function test(metadata, expected) {
 	assert.equal(value('当前版本'), local);
 }
 Promise.all([
-	test('device=nokia_xg-040g-md-ubi\ntarget=an7581\nbuilt=20261031-184422\n', /^nokia_xg-040g-md-ubi \/ 20261031-184422$/),
+	test('device=nokia_xg-040g-md-ubi\ntarget=an7581\nbuilt=20261031-184422\n', /^检查后显示版本信息$/),
+	test('device=nokia_xg-040g-md-ubi\nbuilt=20261102-100000\ndisplay_version=6.18.55 / 2026-10-23 20:56:41\n', /^6\.18\.55 \/ 2026-10-23 20:56:41$/),
 	test('device=only\n', /缺少 device 或 built/),
 	test(new Error('Permission denied'), /Permission denied/)
 ]).catch(err => { console.error(err); process.exitCode = 1; });

@@ -79,12 +79,12 @@ Actions 每天北京时间早上 8 点检查上游更新，发现新版本后自
 
 | 名称 | 含义 |
 | --- | --- |
-| Release tag：`<device_profile>-<YYYYMMDD-HHMMSS>-<run_id>-<attempt>` | 设备、UTC 构建时间、Actions 运行 ID 和尝试次数 |
-| Release 标题：`<device_profile> <tag>` | 同一 tag |
+| Release | 每个版本集中提供全部机型固件，按文件名选择机型 |
+| 版本显示 | 内核版本＋上游提交时间（北京时间） |
 | `ponwrt-airoha-<soc>-<device_profile>-squashfs-sysupgrade.itb` | **正式固件**，U-Boot「日常刷机」用 |
-| `ponwrt-airoha-<soc>-<device_profile>-initramfs-recovery.itb` | **试跑固件**，U-Boot「试跑固件」用 |
+| `*-initramfs-recovery.itb` | **试跑固件**，在基础构建 Artifact 中获取 |
 | `sha256sums` | 所有镜像的 SHA256 校验值 |
-| `ponwrt-version` | 编译时的 commit / 设备 / 时间 |
+| `version.json` | 全部机型的版本、下载地址与校验信息 |
 
 例：`ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb`
 = SoC `an7581` + 设备 `nokia_xg-040g-md-ubi` 的正式固件。
@@ -146,7 +146,7 @@ Actions 每天北京时间早上 8 点检查上游更新，发现新版本后自
 
 | 项目 | 说明 |
 |---|---|
-| 当前版本 | 显示设备型号与编译时间（来自 `/etc/ponwrt-version`） |
+| 当前版本 | 显示内核版本与上游提交时间 |
 | 最新版本 | 显示最近一次成功检查的正式版本，可点击“立即检查”刷新 |
 | 状态 | 显示最近检查的结果和时间，首次检查前显示“尚未检查” |
 | 固件检查频率 | 默认每周，可选每天、每周、每 30 天或关闭，选择后自动保存 |

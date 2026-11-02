@@ -29,7 +29,13 @@ curl() {
   cp "$TMP_TEST/firmware" "$out"
 }
 jsonfilter() {
-  case "${*: -1}" in
+  local selector="${*: -1}"
+  if [[ ${TEST_SCHEMA:-2} == 2 ]]; then
+    if [[ "$selector" == '@.schema' ]]; then echo 2; return; fi
+    [[ "$selector" == '@.devices["'"$TEST_DEVICE"'"].'* ]] || return 1
+    selector="@.${selector##*.}"
+  fi
+  case "$selector" in
     '@.version') echo test ;;
     '@.built') echo "$TEST_BUILT" ;;
     '@.file') echo "$TEST_FILE" ;;
@@ -44,6 +50,8 @@ mkdir "$TMP_TEST/job"
 bash "$TMP_TEST/update.sh" --worker > "$TMP_TEST/output"
 [[ $(cat "$TMP_TEST/job/phase") == ready && "$(wc -l < "$TMP_TEST/flash-calls")" == 1 ]]
 grep -q '^-T ' "$TMP_TEST/flash-calls"
+TEST_SCHEMA=2 bash "$TMP_TEST/update.sh" --worker > "$TMP_TEST/output"
+[[ $(cat "$TMP_TEST/job/phase") == ready ]]
 rm "$TMP_TEST/flash-calls"
 TEST_DEVICE=wrong-device
 if bash "$TMP_TEST/update.sh" --worker > "$TMP_TEST/output"; then echo 'FAIL: wrong device accepted'; exit 1; fi
@@ -98,11 +106,11 @@ sh "$TMP_TEST/first-boot"
 [[ $(grep -Fxc '17 * * * * /usr/bin/ponwrt-update-check --scheduled' "$TMP_TEST/crontabs/root") == 1 ]]
 grep -Fqx '7 3 * * * /usr/bin/other-task' "$TMP_TEST/crontabs/root"
 
-# An MF must only consult its own pointer, including on network failure.
+# Offline checks must preserve an error result.
 printf 'device=nokia_xg-040g-mf-ubi\ntarget=an7583\nbuilt=20261030-120000\n' > "$TMP_TEST/local"
 : > "$TMP_TEST/urls"
 TEST_OFFLINE=1 bash "$TMP_TEST/update.sh" --json > "$TMP_TEST/output"
 grep -q '"update":0,"error":"[^"].*"' "$TMP_TEST/output"
-grep -Fq '/versions/an7583/nokia_xg-040g-mf-ubi/version.json' "$TMP_TEST/urls"
-if grep -Fq '/releases/latest/' "$TMP_TEST/urls"; then exit 1; fi
+grep -Fq '/main/version.json' "$TMP_TEST/urls"
+
 echo 'PASS: MF update channel is isolated from MD latest (mocked)'

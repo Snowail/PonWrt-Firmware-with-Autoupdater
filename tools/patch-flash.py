@@ -58,7 +58,8 @@ m.render = function () {
 			if (result.error) throw new Error(result.error);
 			if (!result.latest || (result.update !== 0 && result.update !== 1))
 				throw new Error('更新检查返回的数据不完整');
-			latest.textContent = result.latest;
+			latest.textContent = result.latest_display || result.latest;
+			if (result.current_display) current.textContent = result.current_display;
 			status.textContent = result.update ? '发现新版本' : '已是最新';
 		}).catch(function (err) {
 			status.textContent = '检查失败：' + err.message;
@@ -144,7 +145,8 @@ m.render = function () {
 			var device = /^device=([^\r\n]+)$/m.exec(text);
 			var built = /^built=([^\r\n]+)$/m.exec(text);
 			if (!device || !built) throw new Error('缺少 device 或 built 字段');
-			current.textContent = device[1] + ' / ' + built[1];
+			var display = /^display_version=([^\r\n]+)$/m.exec(text);
+			current.textContent = display ? display[1] : '检查后显示版本信息';
 			fs.read('/etc/ponwrt-update.state').then(function (text) {
 				var record = text.trimEnd().split('\n');
 				if (manualCheck || record.length !== 4 || record[0] !== device[1] + '/' + built[1]) return;

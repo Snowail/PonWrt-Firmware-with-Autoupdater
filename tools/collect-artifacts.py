@@ -86,6 +86,9 @@ def collect(mode, source, output, soc, device):
         metadata = dict(version=tag, device=device, target=soc, commit=info["commit"], built=info["built"],
                         file=images[0].name, sha256=digest(images[0]), notes="automated build",
                         download_url=f"https://github.com/{repo}/releases/download/{tag}/{images[0].name}")
+        for field in ("kernel", "upstream_time", "display_version"):
+            if field in info:
+                metadata[field] = info[field]
         files = images + [manifest, version, binary / "profiles.json"]
     else:
         raise ValueError(f"Unknown mode: {mode}")

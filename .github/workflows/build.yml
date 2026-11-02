@@ -13,6 +13,10 @@ on:
         description: '仅补跑此运行中未成功的机型，留空构建全部机型'
         default: ''
         type: string
+      cleanup_old_releases:
+        description: '本次发布成功并更新索引后删除此前全部 Release'
+        default: false
+        type: boolean
       jobs:
         description: 'make -j，默认 4'
         required: true
@@ -40,6 +44,7 @@ jobs:
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
       bases: ${{ steps.targets.outputs.bases }}
+      upstream_time: ${{ steps.upstream.outputs.time }}
     steps:
       - uses: actions/checkout@v4
       - name: Read target configs from the pinned upstream revision
@@ -51,6 +56,15 @@ jobs:
           for soc in an7581 an7583; do
             curl -fsSL --retry 3 "https://raw.githubusercontent.com/pbs05/ponwrt/$PIN/configs/$soc.config" -o "upstream/configs/$soc.config"
           done
+      - name: 检查发布范围
+        env:
+          RELEASE: ${{ inputs.make_release }}
+          RETRY_RUN: ${{ inputs.retry_run }}
+        run: |
+          if [[ "$RELEASE" == true && -n "$RETRY_RUN" ]]; then
+            echo "统一 Release 必须包含全部机型，请使用完整构建发布"
+            exit 1
+          fi
       - name: 读取待补跑任务
         if: inputs.retry_run != ''
         env:
@@ -61,6 +75,13 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RETRY_RUN" > retry-run.json
           python3 -c 'import json,os; r=json.load(open("retry-run.json")); assert r["path"] == ".github/workflows/build.yml" and r["status"] == "completed"'
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$RETRY_RUN/jobs?filter=latest&per_page=100" > retry-jobs.json
+      - id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN: ${{ inputs.pin_commit }}
+        run: |
+          time=$(gh api "repos/pbs05/ponwrt/commits/$PIN" --jq .commit.committer.date)
+          echo "time=$time" >> "$GITHUB_OUTPUT"
       - id: targets
         run: python3 tools/build-matrix.py
 
@@ -260,6 +281,7 @@ jobs:
     env:
       PONWRT_SOC: ${{ matrix.soc }}
       PONWRT_DEVICE: ${{ matrix.device }}
+      UPSTREAM_TIME: ${{ needs.plan.outputs.upstream_time }}
       PONWRT_PIN: ${{ inputs.pin_commit }}
     steps:
       - uses: actions/checkout@v4
@@ -290,24 +312,8 @@ jobs:
           path: artifact/
           retention-days: 30
           if-no-files-found: error
-      - name: 发布完整 Release
-        if: ${{ success() && inputs.make_release }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cd artifact
-          sha256sum -c sha256sums
-          TAG="$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')"
-          LATEST=false
-          if [[ "$PONWRT_SOC" == an7581 && "$PONWRT_DEVICE" == nokia_xg-040g-md-ubi ]]; then LATEST=true; fi
-          shopt -s nullglob
-          gh release create "$TAG" ./*.bin ./*.itb ./*.manifest sha256sums ponwrt-version version.json profiles.json \
-            --draft --target "$GITHUB_SHA" --title "$TAG" --notes "ponwrt @ $PONWRT_PIN; run $GITHUB_RUN_ID"
-          gh release edit "$TAG" --draft=false --latest="$LATEST"
-
-
   metadata:
-    needs: build
+    needs: [plan, build]
     if: ${{ success() && inputs.make_release }}
     runs-on: ubuntu-24.04
     permissions:
@@ -320,13 +326,45 @@ jobs:
         with:
           pattern: ponwrt-*
           path: published
-      - name: 汇总各机型正式版本
+      - name: 汇总并发布全部机型
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_TIME: ${{ needs.plan.outputs.upstream_time }}
         run: |
-          python3 tools/publish-metadata.py published
+          python3 tools/prepare-release.py published release "$UPSTREAM_TIME"
+          cd release
+          sha256sum -c sha256sums
+          TAG=$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')
+          TITLE=$(python3 -c 'import json; print("PonWrt " + json.load(open("version.json"))["display_version"] + " (UTC+8)")')
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TITLE" --notes "全部机型升级固件。上游 $UPSTREAM_TIME，构建 $GITHUB_RUN_ID。"
+          fi
+          gh release upload "$TAG" ./* --clobber
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > ../remote-release.json
+          cd ..
+          python3 tools/verify-release-assets.py release remote-release.json
+          gh release edit "$TAG" --draft=false --latest=true
+      - name: 发布成功后更新版本索引
+        run: |
+          python3 tools/publish-metadata.py release
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add versions version.json
+          git add version.json
           if ! git diff --cached --quiet; then
             git commit -m 'chore: publish verified firmware metadata [skip ci]'
             git push origin HEAD:main
           fi
+      - name: 清理此前全部 Release
+        if: inputs.cleanup_old_releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(python3 -c 'import json; print(json.load(open("release/version.json"))["version"])')
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > current-release.json
+          python3 -c 'import json; r=json.load(open("current-release.json")); assert not r["draft"]'
+          created=$(jq -r .created_at current-release.json)
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name != \"$TAG\" and .created_at <= \"$created\") | .tag_name" > old-releases.txt
+          while IFS= read -r old; do
+            [[ -z "$old" ]] || gh release delete "$old" --yes
+          done < old-releases.txt

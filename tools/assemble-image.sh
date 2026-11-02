@@ -22,6 +22,15 @@ chmod +x "$WORK_DIR/source/files/etc/uci-defaults/"*
 VERSION="$WORK_DIR/source/files/etc/ponwrt-version"
 printf 'commit=%s\ndevice=%s\ntarget=%s\nbuilt=%s\n' \
     "$PONWRT_PIN" "$PONWRT_DEVICE" "$PONWRT_SOC" "$(date -u +%Y%m%d-%H%M%S)" > "$VERSION"
+python3 - "$BASE_DIR/base-profiles.json" "$VERSION" "${UPSTREAM_TIME:?}" <<'PY'
+import json, sys
+from datetime import datetime, timezone, timedelta
+kernel = json.load(open(sys.argv[1]))['linux_kernel']['version']
+stamp = datetime.fromisoformat(sys.argv[3].replace('Z', '+00:00'))
+display = f"{kernel} / {stamp.astimezone(timezone(timedelta(hours=8))):%Y-%m-%d %H:%M:%S}"
+with open(sys.argv[2], 'a') as stream:
+    stream.write(f"kernel={kernel}\nupstream_time={sys.argv[3]}\ndisplay_version={display}\n")
+PY
 PACKAGES="$(python3 "$REPO_DIR/tools/imagebuilder-packages.py" "$WORK_DIR/ib" "$BASE_DIR/packages.txt" "$REPO_DIR/public-packages.txt")"
 make -C "$WORK_DIR/ib" image PROFILE="$PONWRT_DEVICE" PACKAGES="$PACKAGES" \
     FILES="$WORK_DIR/source/files" BIN_DIR="$WORK_DIR/source/bin/targets/airoha/$PONWRT_SOC" \

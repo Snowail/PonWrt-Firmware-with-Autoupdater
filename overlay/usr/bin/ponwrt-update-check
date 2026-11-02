@@ -41,14 +41,6 @@ cur_built="$(sed -n 's/^built=//p' "$LOCAL" 2>/dev/null)"
 cur_commit="$(sed -n 's/^commit=//p' "$LOCAL" 2>/dev/null)"
 cur_device="$(sed -n 's/^device=//p' "$LOCAL" 2>/dev/null)"
 cur_target="$(sed -n 's/^target=//p' "$LOCAL" 2>/dev/null)"
-# Keep the established MD channel compatible with already installed firmware.
-# Other devices have independent pointers and must never fall back to MD latest.
-if [ "$cur_target/$cur_device" != an7581/nokia_xg-040g-md-ubi ]; then
-    case "$cur_target" in an7581|an7583) ;; *) exit 1 ;; esac
-    case "$cur_device" in ''|*[!a-z0-9_-]*) exit 1 ;; esac
-    BASE="https://raw.githubusercontent.com/${REPO}/main/versions/$cur_target/$cur_device"
-    RAW="$BASE/version.json"
-fi
 identity="$cur_device/$cur_built"
 # Fixed paths on BusyBox images without stat(1); only use ls metadata fields.
 # shellcheck disable=SC2012
@@ -111,19 +103,28 @@ TMPF="$work/image.itb"
 trap 'rm -f "$TMPJ" "$TMPF"; rmdir "$work"' EXIT
 trap 'exit 1' HUP INT TERM
 
+ldisplay=""; current_display="$(sed -n 's/^display_version=//p' "$LOCAL" 2>/dev/null)"; cur_kernel="$(uname -r)"
 latest=""; lcommit=""; lbuilt=""; lfile=""; lsha=""; lnotes=""; lurl=""; err=""
 
 # 优先取仓库里的 version.json（raw 的缓存很短），再退回 Release 资产
 if fetch "$RAW?t=$(date +%s)" "$TMPJ" || fetch "$RAW" "$TMPJ" || \
    fetch "$BASE/version.json?t=$(date +%s)" "$TMPJ" || fetch "$BASE/version.json" "$TMPJ"; then
-    latest="$(jsonfilter -i "$TMPJ" -e '@.version' 2>/dev/null)"
-    lcommit="$(jsonfilter -i "$TMPJ" -e '@.commit' 2>/dev/null)"
-    lbuilt="$(jsonfilter -i "$TMPJ" -e '@.built' 2>/dev/null)"
-    lfile="$(jsonfilter -i "$TMPJ" -e '@.file' 2>/dev/null)"
-    lsha="$(jsonfilter -i "$TMPJ" -e '@.sha256' 2>/dev/null)"
-    lnotes="$(jsonfilter -i "$TMPJ" -e '@.notes' 2>/dev/null)"
-    ldevice="$(jsonfilter -i "$TMPJ" -e '@.device' 2>/dev/null)"
-    lurl="$(jsonfilter -i "$TMPJ" -e '@.download_url' 2>/dev/null)"
+    if [ "$(jsonfilter -i "$TMPJ" -e '@.schema' 2>/dev/null)" != 2 ]; then
+        echo 'Unsupported firmware catalog' >&2
+        exit 1
+    fi
+    case "$cur_device" in ''|*[!a-z0-9_-]*) exit 1 ;; esac
+    prefix="@.devices[\"$cur_device\"]"
+    jget() { jsonfilter -i "$TMPJ" -e "$prefix.$1" 2>/dev/null; }
+    ldisplay="$(jget display_version)"
+    latest="$(jget version)"
+    lcommit="$(jget commit)"
+    lbuilt="$(jget built)"
+    lfile="$(jget file)"
+    lsha="$(jget sha256)"
+    lnotes="$(jget notes)"
+    ldevice="$(jget device)"
+    lurl="$(jget download_url)"
     [ -n "$latest" ] || err="version.json 解析失败"
     if [ -z "$cur_device" ] || [ -z "$cur_target" ] || [ "$ldevice" != "$cur_device" ] || \
        { [ "$lfile" != "ponwrt-airoha-${cur_target}-${cur_device}-squashfs-sysupgrade.itb" ] &&
@@ -143,6 +144,14 @@ else
     err="无法访问 GitHub Release（可设置代理后重试）"
 fi
 
+[ -n "$ldisplay" ] || ldisplay="$latest"
+if [ -z "$current_display" ]; then
+    if [ -n "$cur_commit" ] && [ "$cur_commit" = "$lcommit" ]; then
+        current_display="$ldisplay"
+    else
+        current_display="$cur_kernel / 上游时间未知"
+    fi
+fi
 update=0
 if [ -z "$err" ] && ! printf '%s\n' "$cur_built" "$lbuilt" | awk '
     length != 15 || $0 !~ /^[0-9]+-[0-9]+$/ || substr($0,9,1) != "-" { exit 1 }'; then
@@ -150,16 +159,16 @@ if [ -z "$err" ] && ! printf '%s\n' "$cur_built" "$lbuilt" | awk '
 fi
 case "$latest" in *[!a-zA-Z0-9._-]*) err="固件版本标记无效";; esac
 if [ -z "$err" ] && [ -n "$latest" ] && \
-   LC_ALL=C awk -v latest="$lbuilt" -v current="$cur_built" 'BEGIN { exit !(("x" latest) > ("x" current)) }'; then
+   LC_ALL=C awk -v latest="$lbuilt" -v current="$cur_built" -v changed="$([ -n "$lcommit" ] && [ "$lcommit" != "$cur_commit" ] && echo 1)" 'BEGIN { exit !(("x" latest) > ("x" current) || (latest == current && changed == 1)) }'; then
     update=1
 fi
 
 # Bind the notice to the installed image. Failed checks keep the last verified result.
 if [ -z "$err" ]; then
     notice=""
-    [ "$update" != 1 ] || notice="$latest"
+    [ "$update" != 1 ] || notice="$ldisplay"
     tmpstate=$(mktemp "$STATE.XXXXXX") || exit 1
-    if ! printf '%s\n' "$identity" "$now" "$notice" "$latest" > "$tmpstate" || ! mv -f "$tmpstate" "$STATE"; then
+    if ! printf '%s\n' "$identity" "$now" "$notice" "$ldisplay" > "$tmpstate" || ! mv -f "$tmpstate" "$STATE"; then
         rm -f "$tmpstate"
         exit 1
     fi
@@ -168,10 +177,10 @@ fi
 case "${1:-}" in
     --scheduled) [ -z "$err" ] ;;
     --json)
-        printf '{"current":"%s","cur_built":"%s","cur_commit":"%s","device":"%s",' \
-            "$(json_esc "${cur_device:-unknown}")" "$(json_esc "$cur_built")" "$(json_esc "$cur_commit")" "$(json_esc "$cur_device")"
-        printf '"latest":"%s","latest_built":"%s","latest_commit":"%s","file":"%s","sha256":"%s","notes":"%s","update":%d,"error":"%s","proxy":"%s"}\n' \
-            "$(json_esc "$latest")" "$(json_esc "$lbuilt")" "$(json_esc "$lcommit")" \
+        printf '{"current_display":"%s","current":"%s","cur_built":"%s","cur_commit":"%s","device":"%s",' \
+            "$(json_esc "$current_display")" "$(json_esc "${cur_device:-unknown}")" "$(json_esc "$cur_built")" "$(json_esc "$cur_commit")" "$(json_esc "$cur_device")"
+        printf '"latest_display":"%s","latest":"%s","latest_built":"%s","latest_commit":"%s","file":"%s","sha256":"%s","notes":"%s","update":%d,"error":"%s","proxy":"%s"}\n' \
+            "$(json_esc "$ldisplay")" "$(json_esc "$latest")" "$(json_esc "$lbuilt")" "$(json_esc "$lcommit")" \
             "$(json_esc "$lfile")" "$(json_esc "$lsha")" "$(json_esc "$lnotes")" "$update" \
             "$(json_esc "$err")" "$(json_esc "$PROXY")"
         ;;

@@ -26,20 +26,13 @@ class MatrixTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             matrix({"an7583": "# no devices"})
 
-    def test_metadata_channels_are_independent(self):
+    def test_only_unified_catalog_is_published(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            src = root / "artifacts"
-            (root / "version.json").write_text('old MD')
-            for soc, device in (("an7583", "nokia_xg-040g-mf-ubi"),):
-                folder = src / device
-                folder.mkdir(parents=True)
-                (folder / "version.json").write_text(json.dumps(dict(target=soc, device=device)))
-            publish(src, root)
-            self.assertEqual((root / "version.json").read_text(), 'old MD')
-            self.assertTrue((root / "versions/an7583/nokia_xg-040g-mf-ubi/version.json").exists())
-            folder = src / "md"
-            folder.mkdir()
-            (folder / "version.json").write_text(json.dumps(dict(target="an7581", device="nokia_xg-040g-md-ubi")))
-            publish(src, root)
-            self.assertEqual(json.loads((root / "version.json").read_text())["device"], "nokia_xg-040g-md-ubi")
+            source = root / "release"
+            source.mkdir()
+            catalog = dict(schema=2, devices={"test": {"device": "test"}})
+            (source / "version.json").write_text(json.dumps(catalog))
+            publish(source, root)
+            self.assertEqual(json.loads((root / "version.json").read_text()), catalog)
+            self.assertFalse((root / "versions").exists())
