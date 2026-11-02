@@ -28,14 +28,14 @@ esac
 # fetch <url> <out> [timeout]
 fetch() {
     if [ -n "$PROXY" ]; then
-        curl -fsSL --max-time "${3:-25}" -D "${4:-/dev/null}" -x "$PROXY" -o "$2" "$1" 2>/dev/null && return 0
-        curl -fsSL --max-time "${3:-25}" -D "${4:-/dev/null}" --noproxy '*' -o "$2" "$1" 2>/dev/null && return 0
+        curl -fsSL --connect-timeout 8 --speed-limit 128 --speed-time 15 --max-time "${3:-25}" -D "${4:-/dev/null}" -x "$PROXY" -o "$2" "$1" 2>/dev/null && return 0
+        curl -fsSL --connect-timeout 8 --speed-limit 128 --speed-time 15 --max-time "${3:-25}" -D "${4:-/dev/null}" --noproxy '*' -o "$2" "$1" 2>/dev/null && return 0
         return 1
     fi
-    curl -fsSL --max-time "${3:-25}" -D "${4:-/dev/null}" -o "$2" "$1" 2>/dev/null
+    curl -fsSL --connect-timeout 8 --speed-limit 128 --speed-time 15 --max-time "${3:-25}" -D "${4:-/dev/null}" -o "$2" "$1" 2>/dev/null
 }
 
-json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+json_esc() { printf '%s' "$1" | tr '\r\n' '  ' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 cur_built="$(sed -n 's/^built=//p' "$LOCAL" 2>/dev/null)"
 cur_commit="$(sed -n 's/^commit=//p' "$LOCAL" 2>/dev/null)"
@@ -45,32 +45,100 @@ identity="$cur_device/$cur_built"
 # Fixed paths on BusyBox images without stat(1); only use ls metadata fields.
 # shellcheck disable=SC2012
 private_job() { ls -ldn "$JOB" 2>/dev/null | awk '$1 == "drwx------" && $3 == 0 {ok=1} END {exit !ok}'; }
+number() {
+    value=$(cat "$1" 2>/dev/null)
+    case "$value" in ''|*[!0-9]*) echo 0 ;; *) printf '%s' "$value" ;; esac
+}
 phase() { printf '%s\n' "$1" > "$JOB/phase.new" && mv "$JOB/phase.new" "$JOB/phase"; }
 fail_job() { printf '%s\n' "$1" > "$JOB/error"; phase failed; exit 1; }
 verified() {
     (cd "$JOB" && sha256sum -c checksum >/dev/null) && sysupgrade -T "$JOB/image.itb"
 }
+# Firmware transfers have bounded attempts and never initiate flashing.
+download_image() {
+    attempt=1; max_attempts=3
+    [ -z "$PROXY" ] || max_attempts=4
+    echo "$max_attempts" > "$JOB/max_attempts"
+    while [ "$attempt" -le "$max_attempts" ]; do
+        echo "$attempt" > "$JOB/attempt"
+        phase downloading
+        set -- --noproxy '*'
+        route=direct
+        if [ -n "$PROXY" ] && [ "$((attempt % 2))" = 1 ]; then
+            set -- -x "$PROXY"; route=proxy
+        fi
+        echo "$route" > "$JOB/route"
+        rc=0
+        curl -fsSL --connect-timeout 8 --max-time 180 --speed-limit 16384 --speed-time 20 \
+            -C - -D "$JOB/headers" "$@" -o "$JOB/image.itb" \
+            "$lurl?attempt=$(date +%s)-$attempt" 2>"$JOB/curl-error" || rc=$?
+        echo "$rc" > "$JOB/exit_code"
+        if [ "$rc" = 0 ]; then
+            phase verifying
+            if (cd "$JOB" && sha256sum -c checksum >/dev/null 2>&1); then
+                sysupgrade -T "$JOB/image.itb" || fail_job '设备兼容性校验失败，禁止刷写'
+                rm -f "$JOB/error" "$JOB/curl-error"
+                phase ready
+                return 0
+            fi
+            message='SHA256 校验失败'; rm -f "$JOB/image.itb"
+        else
+            case "$rc" in
+                5|6) message='域名解析失败' ;;
+                7) message='无法建立连接' ;;
+                18) message='连接中断，文件不完整' ;;
+                22) message='下载服务器返回 HTTP 错误' ;;
+                28) message='连接超时或下载速度过低' ;;
+                33|36) message='服务器不支持续传'; rm -f "$JOB/image.itb" ;;
+                23) fail_job '写入固件失败，请检查临时空间' ;;
+                35|60) message='TLS 连接或证书校验失败' ;;
+                *) message='传输失败' ;;
+            esac
+            message="$message（curl $rc）"
+        fi
+        printf '%s\n' "$message" > "$JOB/error"
+        [ "$attempt" -lt "$max_attempts" ] || break
+        phase retrying
+        sleep 3
+        attempt=$((attempt + 1))
+    done
+    fail_job "已尝试 $max_attempts 次：$message；可点击下载重试"
+}
+worker_cleanup() {
+    if [ "${1:-}" != 0 ]; then
+        case "$(cat "$JOB/phase" 2>/dev/null)" in
+            ready|failed) ;; *) printf '%s\n' '后台任务异常退出，请重新下载' > "$JOB/error"; phase failed ;;
+        esac
+    fi
+    rm -f "$TMPJ" "$TMPF"
+    rmdir "$work"
+}
 case "${1:-}" in
     --status)
         if [ -e "$JOB" ]; then private_job || exit 1; fi
         state=$(cat "$JOB/phase" 2>/dev/null || echo idle)
-        case "$state" in preparing|downloading|verifying|flashing)
+        case "$state" in preparing|downloading|retrying|verifying|flashing)
             if (exec 9<"$JOB/lock"; flock -n 9); then state=interrupted; fi ;;
         esac
         # shellcheck disable=SC2012
         bytes=$(ls -ln "$JOB/image.itb" 2>/dev/null | awk 'END {print $5+0}')
-        total=$(awk 'tolower($1) ~ /^http\// {n=0} tolower($1)=="content-length:" {n=$2+0} END {printf "%.0f",n}' "$JOB/headers" 2>/dev/null || echo 0)
-        printf '{"phase":"%s","bytes":%s,"total":%s,"version":"%s","error":"%s"}\n' "$state" "$bytes" "$total" \
-            "$(cat "$JOB/version" 2>/dev/null)" "$(json_esc "$(cat "$JOB/error" 2>/dev/null)")"
+        total=$(awk 'tolower($1) ~ /^http\// {n=0} tolower($1)=="content-length:" {n=$2+0} tolower($1)=="content-range:" {split($3,r,"/"); n=r[2]+0} END {printf "%.0f",n}' "$JOB/headers" 2>/dev/null)
+        [ -n "$total" ] || total=0
+        printf '{"phase":"%s","bytes":%s,"total":%s,"version":"%s","error":"%s","attempt":%s,"max_attempts":%s,"exit_code":%s}\n' "$state" "$bytes" "$total" \
+            "$(cat "$JOB/version" 2>/dev/null)" "$(json_esc "$(cat "$JOB/error" 2>/dev/null)")" \
+            "$(number "$JOB/attempt")" "$(number "$JOB/max_attempts")" \
+            "$(number "$JOB/exit_code")"
         exit 0 ;;
-    --download|--flash)
+    --download|--auto-download|--flash)
         umask 077
         mkdir "$JOB" 2>/dev/null || private_job || exit 1
         exec 9>"$JOB/lock"
-        flock -n 9 || { echo '已有任务正在运行'; exit 1; }
-        if [ "$1" = --download ]; then
+        flock -n 9 || { [ "$1" = --auto-download ] && exit 0; echo '已有任务正在运行'; exit 1; }
+        if [ "$1" != --flash ]; then
+            if [ "$1" = --auto-download ] && [ "$(cat "$JOB/phase" 2>/dev/null)" = ready ] &&
+               [ -s "$JOB/desired" ] && [ "$(cat "$JOB/version" 2>/dev/null)" = "$(cat "$JOB/desired")" ] && verified >/dev/null 2>&1; then exit 0; fi
             phase preparing || exit 1
-            rm -f "$JOB/image.itb" "$JOB/headers" "$JOB/version" "$JOB/error" "$JOB/checksum"
+            rm -f "$JOB/image.itb" "$JOB/headers" "$JOB/version" "$JOB/error" "$JOB/checksum" "$JOB/attempt" "$JOB/max_attempts" "$JOB/exit_code" "$JOB/curl-error"
             "$0" --worker </dev/null >/dev/null 2>&1 &
         else
             [ "$(cat "$JOB/phase" 2>/dev/null)" = ready ] || { echo '请先下载并校验'; exit 1; }
@@ -92,7 +160,10 @@ if [ "${1:-}" = --scheduled ]; then
         case "$checked" in
             ''|*[!0-9]*) ;;
             *) if [ "$identity" = "$previous" ] && [ "$now" -ge "$checked" ] &&
-                  [ "$((now - checked))" -lt "$period" ]; then exit 0; fi ;;
+                  [ "$((now - checked))" -lt "$period" ]; then
+                if [ -n "$(sed -n '3p' "$STATE")" ]; then "$0" --auto-download; fi
+                exit 0
+            fi ;;
         esac
     fi
 fi
@@ -100,7 +171,7 @@ fi
 work=$(mktemp -d /tmp/ponwrt-check.XXXXXX) || exit 1
 TMPJ="$work/remote.json"
 TMPF="$work/image.itb"
-trap 'rm -f "$TMPJ" "$TMPF"; rmdir "$work"' EXIT
+if [ "${1:-}" = --worker ]; then trap 'worker_cleanup $?' EXIT; else trap 'rm -f "$TMPJ" "$TMPF"; rmdir "$work"' EXIT; fi
 trap 'exit 1' HUP INT TERM
 
 ldisplay=""; current_display="$(sed -n 's/^display_version=//p' "$LOCAL" 2>/dev/null)"; cur_kernel="$(uname -r)"
@@ -175,7 +246,15 @@ if [ -z "$err" ]; then
 fi
 
 case "${1:-}" in
-    --scheduled) [ -z "$err" ] ;;
+    --scheduled)
+        [ -z "$err" ] || exit 1
+        if [ "$update" = 1 ]; then
+            umask 077
+            mkdir "$JOB" 2>/dev/null || private_job || exit 1
+            printf '%s\n' "$latest" > "$JOB/desired.new" && mv "$JOB/desired.new" "$JOB/desired"
+            "$0" --auto-download
+        fi
+        ;;
     --json)
         printf '{"current_display":"%s","current":"%s","cur_built":"%s","cur_commit":"%s","device":"%s",' \
             "$(json_esc "$current_display")" "$(json_esc "${cur_device:-unknown}")" "$(json_esc "$cur_built")" "$(json_esc "$cur_commit")" "$(json_esc "$cur_device")"
@@ -188,12 +267,9 @@ case "${1:-}" in
         [ -z "$err" ] || fail_job "$err"
         [ "$update" = 1 ] || fail_job '没有可用的新版本'
         echo "$latest" > "$JOB/version"
+        [ -s "$JOB/desired" ] || echo "$latest" > "$JOB/desired"
         printf '%s  image.itb\n' "$lsha" > "$JOB/checksum"
-        phase downloading
-        fetch "$lurl" "$JOB/image.itb" 900 "$JOB/headers" || fail_job '固件下载失败，可重试'
-        phase verifying
-        verified || fail_job 'SHA256 或设备兼容性校验失败'
-        phase ready
+        download_image
         ;;
     *)
         [ -n "$PROXY" ] && echo "代理: $PROXY"

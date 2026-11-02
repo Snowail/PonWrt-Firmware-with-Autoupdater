@@ -7,9 +7,9 @@ const source = readFileSync(process.argv[2], 'utf8');
 async function test(metadata, expected) {
 	const rows = new Map();
 	const buttons = new Map();
-	let interval, saved;
+	let interval, saved, poll;
 	function E(tag, attrs, children) {
-		const element = { textContent: typeof children === 'string' ? children : '', ...attrs };
+		const element = { isConnected: true, textContent: typeof children === 'string' ? children : '', ...attrs };
 		if (tag === 'td') element.content = children;
 		if (tag === 'tr') rows.set(children[0].content, children[1].content);
 		if (tag === 'button') buttons.set(children[0], element);
@@ -40,7 +40,7 @@ async function test(metadata, expected) {
 			saved = value;
 		},
 		exec: async (cmd, args) => {
-			if (args[0] === '--status') return { code: 0, stdout: JSON.stringify({phase, bytes: 1048576, total: 2097152}) };
+			if (args[0] === '--status') return { code: 0, stdout: JSON.stringify({phase, bytes: 1048576, total: 2097152, attempt: 2, max_attempts: 4, error: phase === 'failed' ? '连接超时（curl 28）' : ''}) };
 			if (args[0] === '--download') { phase = 'downloading'; return { code: 0 }; }
 			calls++;
 			assert.equal(cmd, '/usr/bin/ponwrt-update-check');
@@ -50,16 +50,29 @@ async function test(metadata, expected) {
 		}
 	};
 	const L = { hasViewPermission: () => true, resolveDefault: p => p, bind: fn => fn };
-	const view = new Function('view', 'rpc', 'fs', 'form', 'L', 'E', '_', source)(
-		{ extend: v => v }, { declare: () => () => {} }, fs, { JSONMap }, L, E, s => s);
+	const view = new Function('view', 'rpc', 'fs', 'form', 'L', 'E', '_', 'setTimeout', 'clearTimeout', source)(
+		{ extend: v => v }, { declare: () => () => {} }, fs, { JSONMap }, L, E, s => s, (fn, delay) => { poll = { fn, delay }; return 1; }, () => {});
 	await view.render(await view.load());
 	await new Promise(resolve => setImmediate(resolve));
 	const value = key => rows.get(key).textContent;
 	assert.equal(calls, 0);
+	assert.equal(poll.delay, 10000); // Detect downloads started by cron while the page stays open.
 	assert.equal(buttons.get('刷写已下载固件').disabled, true);
 	await buttons.get('下载固件').click();
 	assert.match(value('下载进度'), /50%/);
 	assert.equal(buttons.get('刷写已下载固件').disabled, true);
+	phase = 'retrying';
+	await poll.fn();
+	assert.match(value('下载进度'), /等待重试.*第 2\/4 次尝试/);
+	assert.equal(buttons.get('下载固件').disabled, true);
+	phase = 'failed';
+	await poll.fn();
+	assert.match(value('下载进度'), /curl 28/);
+	assert.equal(buttons.get('下载固件').disabled, false);
+	assert.equal(buttons.get('刷写已下载固件').disabled, true);
+	phase = 'ready';
+	await poll.fn();
+	assert.equal(buttons.get('刷写已下载固件').disabled, false);
 	assert.match(value('当前版本'), expected);
 	const local = value('当前版本');
 	assert.equal(value('状态'), '尚未检查');

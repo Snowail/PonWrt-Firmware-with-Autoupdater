@@ -65,7 +65,7 @@ m.render = function () {
 			status.textContent = '检查失败：' + err.message;
 		}).finally(function () { btnCheck.disabled = false; });
 	} }, [ '立即检查' ]);
-	var progress = E('span', {}, '读取中…'), timer, tracking = false;
+	var progress = E('span', {}, '读取中…'), timer;
 	cells.push([ '下载进度', progress ]);
 	function command(arg) {
 		return fs.exec('/usr/bin/ponwrt-update-check', [ arg ]).then(function (r) {
@@ -77,20 +77,19 @@ m.render = function () {
 		clearTimeout(timer);
 		return command('--status').then(function (out) {
 			var j = JSON.parse(out);
-			var labels = { idle: '等待下载', preparing: '正在获取版本信息', downloading: '下载中', verifying: '正在校验',
+			var labels = { idle: '等待下载', preparing: '正在获取版本信息', downloading: '下载中', retrying: '等待重试', verifying: '正在校验',
 				ready: '校验通过，可以刷写', flashing: '正在刷写，请等待设备重启', failed: '失败', interrupted: '任务中断，可重新下载' };
-			var busy = ['preparing','downloading','verifying','flashing'].includes(j.phase);
-			tracking = busy;
+			var busy = ['preparing','downloading','retrying','verifying','flashing'].includes(j.phase);
 			var size = (j.bytes / 1048576).toFixed(1) + ' MiB';
 			if (j.total > 0) size += ' / ' + (j.total / 1048576).toFixed(1) + ' MiB (' + Math.min(100, Math.floor(100*j.bytes/j.total)) + '%)';
-			progress.textContent = [labels[j.phase], j.version, j.bytes ? size : '', j.error].filter(Boolean).join(' · ');
+			progress.textContent = [labels[j.phase], j.version, j.bytes ? size : '', j.attempt ? '第 ' + j.attempt + '/' + j.max_attempts + ' 次尝试' : '', j.error].filter(Boolean).join(' · ');
 			btnDownload.disabled = isReadonlyView || busy;
 			btnFlash.disabled = isReadonlyView || j.phase !== 'ready';
-			if (busy && box.isConnected) timer = setTimeout(refreshJob, 2000);
+			if (box.isConnected) timer = setTimeout(refreshJob, busy ? 2000 : 10000);
 		}).catch(function (err) {
 			progress.textContent = '读取下载状态失败：' + err.message;
 			btnFlash.disabled = true;
-			if (tracking && box.isConnected) timer = setTimeout(refreshJob, 5000);
+			if (box.isConnected) timer = setTimeout(refreshJob, 5000);
 		});
 	}
 	function startJob(arg) {
@@ -121,7 +120,7 @@ m.render = function () {
 	} }, [ '设置代理' ]);
 	var box = E('div', { 'class': 'cbi-section', 'id': 'ponwrt-update' }, [
 		E('h3', {}, '在线更新检查'),
-		E('div', { 'class': 'cbi-section-descr' }, '下载在设备后台执行；校验通过后，请单独确认刷写。'),
+		E('div', { 'class': 'cbi-section-descr' }, '定时检查发现新固件后自动后台下载；校验通过后，请单独确认刷写。'),
 		E('table', { 'class': 'table' }, cells.map(function (c) {
 			return E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td', 'width': '33%' }, c[0]),
