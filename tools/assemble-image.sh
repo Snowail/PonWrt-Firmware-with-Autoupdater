@@ -33,6 +33,14 @@ python3 "$REPO_DIR/tools/patch-flash.py" "$page"
 cat "$REPO_DIR/tools/ponwrt-banner.ut" >> "$header"
 node --check "$page"
 node "$REPO_DIR/tests/test-flash-page.js" "$page"
+samba_page="$WORK_DIR/source/files/www/luci-static/resources/view/samba4.js"
+samba_acl="$WORK_DIR/source/files/usr/share/rpcd/acl.d/luci-app-samba4.json"
+mkdir -p "$(dirname "$samba_acl")"
+curl -fsSL --retry 3 "https://raw.githubusercontent.com/immortalwrt/luci/$luci_pin/applications/luci-app-samba4/htdocs/luci-static/resources/view/samba4.js" -o "$samba_page"
+curl -fsSL --retry 3 "https://raw.githubusercontent.com/immortalwrt/luci/$luci_pin/applications/luci-app-samba4/root/usr/share/rpcd/acl.d/luci-app-samba4.json" -o "$samba_acl"
+python3 "$REPO_DIR/tools/patch-samba.py" "$samba_page" "$samba_acl"
+node --check "$samba_page"
+node "$REPO_DIR/tests/test-samba-page.js" "$samba_page"
 VERSION="$WORK_DIR/source/files/etc/ponwrt-version"
 printf 'commit=%s\ndevice=%s\ntarget=%s\nbuilt=%s\n' \
     "$PONWRT_PIN" "$PONWRT_DEVICE" "$PONWRT_SOC" "$(date -u +%Y%m%d-%H%M%S)" > "$VERSION"
@@ -49,7 +57,7 @@ PACKAGES="$(python3 "$REPO_DIR/tools/imagebuilder-packages.py" "$WORK_DIR/ib" "$
 make -C "$WORK_DIR/ib" image PROFILE="$PONWRT_DEVICE" PACKAGES="$PACKAGES" \
     FILES="$WORK_DIR/source/files" BIN_DIR="$WORK_DIR/source/bin/targets/airoha/$PONWRT_SOC" \
     CONFIG_TARGET_ROOTFS_INITRAMFS= ROOTFS_FILESYSTEM=squashfs ADD_LOCAL_KEY=1 \
-    DISABLED_SERVICES="tailscale samba4"
+    DISABLED_SERVICES="tailscale samba4 ddns"
 python3 "$REPO_DIR/tools/collect-artifacts.py" imagebuilder "$WORK_DIR/source" "$OUT_DIR" "$PONWRT_SOC" "$PONWRT_DEVICE"
 manifest=("$OUT_DIR"/*.manifest)
 while IFS= read -r pkg || [[ -n "$pkg" ]]; do

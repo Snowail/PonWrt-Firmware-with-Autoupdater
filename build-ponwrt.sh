@@ -178,6 +178,12 @@ cp -a "$REPO_DIR/overlay/." "$PKG/root/"
 chmod +x "$PKG/root/usr/bin/ponwrt-update-check"
 git diff --exit-code -- package/Makefile
 ./scripts/feeds install -a 2>&1 | tee "$DIAG_DIR/feeds-install.log"
+SAMBA_APP=feeds/luci/applications/luci-app-samba4
+python3 "$REPO_DIR/tools/patch-samba.py" \
+  "$SAMBA_APP/htdocs/luci-static/resources/view/samba4.js" \
+  "$SAMBA_APP/root/usr/share/rpcd/acl.d/luci-app-samba4.json"
+node --check "$SAMBA_APP/htdocs/luci-static/resources/view/samba4.js"
+node "$REPO_DIR/tests/test-samba-page.js" "$SAMBA_APP/htdocs/luci-static/resources/view/samba4.js"
 
 FLASH_JS="feeds/luci/modules/luci-mod-system/htdocs/luci-static/resources/view/system/flash.js"
 if [ -f "$FLASH_JS" ]; then

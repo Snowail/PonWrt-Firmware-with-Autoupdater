@@ -19,8 +19,35 @@ def module(name):
 prepare = module("prepare-config").prepare
 collect = module("collect-artifacts").collect
 patcher = module("patch-flash")
+samba_patcher = module("patch-samba")
 DEVICE = "nokia_xg-040g-md-ubi"
 PREFIX = f"ponwrt-airoha-an7581-{DEVICE}"
+
+
+class SambaPatchTests(unittest.TestCase):
+    def test_idempotent_patch_and_scoped_permissions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            page, acl = Path(tmp) / "samba.js", Path(tmp) / "acl.json"
+            page.write_text("'require fs';\no = s.taboption('general', widgets.NetworkSelect, 'interface');\n")
+            acl.write_text(json.dumps({"luci-app-samba4": {"read": {"uci": ["samba4"]}, "write": {}}}))
+            samba_patcher.patch(page, acl)
+            first = page.read_text(encoding="utf-8")
+            samba_patcher.patch(page, acl)
+            self.assertEqual(first, page.read_text(encoding="utf-8"))
+            rule = json.loads(acl.read_text(encoding="utf-8"))["luci-app-samba4"]
+            self.assertEqual(rule["read"]["uci"], ["samba4"])
+            self.assertNotIn("/etc/init.d/samba4 start", rule["read"]["file"])
+            self.assertEqual(rule["write"]["file"]["/etc/init.d/samba4 start"], ["exec"])
+            self.assertNotIn("*", rule["write"]["file"])
+
+    def test_changed_upstream_is_rejected_without_overwriting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            page, acl = Path(tmp) / "samba.js", Path(tmp) / "acl.json"
+            page.write_text("'require fs';\nreturn {};\n")
+            acl.write_text('{}')
+            with self.assertRaises(ValueError):
+                samba_patcher.patch(page, acl)
+            self.assertEqual(page.read_text(encoding="utf-8"), "'require fs';\nreturn {};\n")
 
 
 class ConfigurationTests(unittest.TestCase):

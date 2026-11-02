@@ -16,4 +16,7 @@ fi
 if cmp -s /etc/config/samba4 /rom/etc/config/samba4; then
     [ ! -x /etc/init.d/samba4 ] || /etc/init.d/samba4 disable
 fi
+if cmp -s /etc/config/ddns /rom/etc/config/ddns; then
+    [ ! -x /etc/init.d/ddns ] || /etc/init.d/ddns disable
+fi
 exit 0
