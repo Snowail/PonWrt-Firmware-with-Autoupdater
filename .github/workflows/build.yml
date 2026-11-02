@@ -17,6 +17,10 @@ on:
         description: '本次发布成功并更新索引后删除此前全部 Release'
         default: false
         type: boolean
+      base_run:
+        description: '可选：复用指定运行的匹配基础产物，校验上游提交与 sources.lock'
+        default: ''
+        type: string
       jobs:
         description: 'make -j，默认 4'
         required: true
@@ -95,6 +99,7 @@ jobs:
     timeout-minutes: 360
     permissions:
       contents: write
+      actions: read
     defaults:
       run:
         shell: bash
@@ -121,7 +126,32 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/base
-          key: ib-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json', 'build-ponwrt.sh', 'public-packages.txt', 'package/**', 'overlay/**', 'tools/prepare-config.py', 'tools/source-lock.py', 'tools/patch-flash.py', 'tools/ponwrt-banner.ut', 'tools/99-ponwrt-service-defaults', 'tools/build-lib.sh', 'tools/export-imagebuilder.py') }}
+          key: ib-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.soc }}-${{ inputs.pin_commit }}-${{ hashFiles('sources.lock.json', 'build-ponwrt.sh', 'public-packages.txt', 'package/**', 'tools/prepare-config.py', 'tools/source-lock.py', 'tools/99-ponwrt-service-defaults', 'tools/build-lib.sh', 'tools/export-imagebuilder.py') }}
+
+      - name: 导入指定运行的 Image Builder
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: imagebuilder-${{ matrix.soc }}
+          path: ~/base
+          run-id: ${{ inputs.base_run }}
+          github-token: ${{ github.token }}
+      - name: 导入基础产物的版本锁定记录
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: base-diagnostics-${{ matrix.soc }}
+          path: imported-diagnostics
+          run-id: ${{ inputs.base_run }}
+          github-token: ${{ github.token }}
+      - name: 校验导入基础产物
+        id: imported
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run != ''
+        run: |
+          cmp sources.lock.json imported-diagnostics/diagnostics/sources.lock.json
+          python3 -c 'import json,os; b=json.load(open(os.path.expanduser("~/base/base.json"))); assert b["commit"] == os.environ["PONWRT_PIN"] and b["soc"] == os.environ["PONWRT_SOC"]'
+          cd ~/base
+          sha256sum -c sha256sums
 
       - name: 参数与脚本预检
         env:
@@ -142,7 +172,7 @@ jobs:
           node tests/test-notice.js
 
       - name: 释放磁盘空间
-        if: steps.bundle.outputs.cache-hit != 'true'
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run == ''
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /opt/hostedtoolcache/CodeQL /usr/local/share/boost
@@ -150,7 +180,7 @@ jobs:
           df -h /
 
       - name: 恢复下载缓存
-        if: steps.bundle.outputs.cache-hit != 'true'
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run == ''
         id: dl
         uses: actions/cache/restore@v4
         with:
@@ -161,7 +191,7 @@ jobs:
             dl-v3-${{ runner.os }}-${{ matrix.soc }}-
 
       - name: 恢复编译缓存
-        if: steps.bundle.outputs.cache-hit != 'true'
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run == ''
         id: ccache
         uses: actions/cache/restore@v4
         with:
@@ -172,14 +202,14 @@ jobs:
             cc-v3-${{ runner.os }}-${{ matrix.soc }}-
 
       - name: 准备源码、配置与下载
-        if: steps.bundle.outputs.cache-hit != 'true'
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run == ''
         id: prepare
         env:
           PONWRT_STAGE: prepare
         run: bash build-ponwrt.sh
 
       - name: 恢复工具链缓存（精确配置匹配）
-        if: steps.bundle.outputs.cache-hit != 'true'
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run == ''
         id: toolchain
         uses: actions/cache/restore@v4
         with:
@@ -191,7 +221,7 @@ jobs:
           key: tc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.soc }}-all-${{ steps.prepare.outputs.toolchain_key }}
 
       - name: 检查并完成工具链
-        if: steps.bundle.outputs.cache-hit != 'true'
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run == ''
         id: tools
         env:
           PONWRT_STAGE: toolchain
@@ -209,7 +239,7 @@ jobs:
           key: ${{ steps.toolchain.outputs.cache-primary-key }}
 
       - name: 编译与产物校验
-        if: steps.bundle.outputs.cache-hit != 'true'
+        if: steps.bundle.outputs.cache-hit != 'true' && inputs.base_run == ''
         id: compile
         timeout-minutes: 325
         env:
@@ -229,7 +259,7 @@ jobs:
           if [[ -f "$DIAG_DIR/compile.ok" ]]; then echo 'compile_complete=true' >> "$GITHUB_OUTPUT"; fi
 
       - name: 保存完整基础产物
-        if: steps.bundle.outputs.cache-hit != 'true' && steps.compile.outcome == 'success'
+        if: steps.bundle.outputs.cache-hit != 'true' && (steps.compile.outcome == 'success' || steps.imported.outcome == 'success')
         uses: actions/cache/save@v4
         with:
           path: ~/base

@@ -19,6 +19,20 @@ mkdir -p "$WORK_DIR/ib" "$WORK_DIR/source/bin/targets/airoha/$PONWRT_SOC"
 tar --zstd -xf "$BASE_DIR/imagebuilder.tar.zst" -C "$WORK_DIR/ib" --strip-components=1
 cp -a "$BASE_DIR/files" "$WORK_DIR/source/files"
 chmod +x "$WORK_DIR/source/files/etc/uci-defaults/"*
+# Runtime files are assembled fresh so UI/backend changes can reuse the kernel base.
+cp -a "$REPO_DIR/overlay/." "$WORK_DIR/source/files/"
+cp "$REPO_DIR/tools/99-ponwrt-service-defaults" "$WORK_DIR/source/files/etc/uci-defaults/"
+chmod +x "$WORK_DIR/source/files/etc/uci-defaults/"* "$WORK_DIR/source/files/usr/bin/ponwrt-update-check"
+luci_pin="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["feeds"]["luci"]["commit"])' "$REPO_DIR/sources.lock.json")"
+page="$WORK_DIR/source/files/www/luci-static/resources/view/system/flash.js"
+header="$WORK_DIR/source/files/usr/share/ucode/luci/template/header.ut"
+mkdir -p "$(dirname "$page")" "$(dirname "$header")"
+curl -fsSL --retry 3 "https://raw.githubusercontent.com/immortalwrt/luci/$luci_pin/modules/luci-mod-system/htdocs/luci-static/resources/view/system/flash.js" -o "$page"
+curl -fsSL --retry 3 "https://raw.githubusercontent.com/immortalwrt/luci/$luci_pin/modules/luci-base/ucode/template/header.ut" -o "$header"
+python3 "$REPO_DIR/tools/patch-flash.py" "$page"
+cat "$REPO_DIR/tools/ponwrt-banner.ut" >> "$header"
+node --check "$page"
+node "$REPO_DIR/tests/test-flash-page.js" "$page"
 VERSION="$WORK_DIR/source/files/etc/ponwrt-version"
 printf 'commit=%s\ndevice=%s\ntarget=%s\nbuilt=%s\n' \
     "$PONWRT_PIN" "$PONWRT_DEVICE" "$PONWRT_SOC" "$(date -u +%Y%m%d-%H%M%S)" > "$VERSION"
