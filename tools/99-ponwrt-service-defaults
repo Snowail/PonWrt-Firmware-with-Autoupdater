@@ -1,8 +1,19 @@
 #!/bin/sh
 # Apply stock-image defaults only. Keep settings restored through sysupgrade.
-for spec in 'adguardhome.config.enabled' 'upnpd.config.enabled'; do
+for spec in 'adguardhome.config.enabled' 'upnpd.config.enabled' 'tailscale.settings.service_enabled'; do
     cfg=${spec%%.*}
     cmp -s "/etc/config/$cfg" "/rom/etc/config/$cfg" || continue
     uci -q set "$spec=0" && uci commit "$cfg"
 done
+# The community helper must honor its LuCI switch at boot as well as on reload.
+helper=/etc/init.d/tailscale-settings
+if [ -f "$helper" ]; then
+    sed -i '/^start_service() {/,/^}/s/^[[:space:]]*apply_settings$/\thandle_service_state/' "$helper"
+fi
+if [ "$(uci -q get tailscale.settings.service_enabled)" = 0 ]; then
+    [ ! -x /etc/init.d/tailscale ] || /etc/init.d/tailscale disable
+fi
+if cmp -s /etc/config/samba4 /rom/etc/config/samba4; then
+    [ ! -x /etc/init.d/samba4 ] || /etc/init.d/samba4 disable
+fi
 exit 0

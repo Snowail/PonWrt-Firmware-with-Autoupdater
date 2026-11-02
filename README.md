@@ -38,7 +38,7 @@
 | 文件与共享 | `openssh-sftp-server`、`samba4-server`、`luci-app-samba4` |
 | 诊断 | `iperf3`、`bind-dig`、`ethtool-full`、`htop` |
 
-全新安装默认关闭 AdGuard Home、Lucky 和 UPnP。由用户在 LuCI 中选择是否启用。保留配置升级时沿用已保存的服务设置。完整固件的实际依赖与版本见该次 Release 附带的 `.manifest`。
+全新安装默认关闭 AdGuard Home、Lucky、UPnP、Tailscale 和 Samba。由用户在 LuCI 中选择是否启用。保留配置升级时沿用已保存的服务设置。完整固件的实际依赖与版本见该次 Release 附带的 `.manifest`。
 
 > 科学上网因性能不佳暂时未加入
 
