@@ -17,6 +17,10 @@ on:
         description: '本次发布成功并更新索引后删除此前全部 Release'
         default: false
         type: boolean
+      publish_run:
+        description: '可选：仅发布指定运行已成功构建的全部机型 Artifact'
+        default: ''
+        type: string
       base_run:
         description: '可选：复用指定运行的匹配基础产物，校验上游提交与 sources.lock'
         default: ''
@@ -91,6 +95,7 @@ jobs:
 
   base:
     needs: plan
+    if: inputs.publish_run == ''
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.bases) }}
@@ -299,7 +304,7 @@ jobs:
 
   build:
     needs: [plan, base]
-    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && inputs.publish_run == '' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -344,10 +349,11 @@ jobs:
           if-no-files-found: error
   metadata:
     needs: [plan, build]
-    if: ${{ success() && inputs.make_release }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && inputs.make_release && (inputs.publish_run != '' || needs.build.result == 'success') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -356,21 +362,30 @@ jobs:
         with:
           pattern: ponwrt-*
           path: published
+          run-id: ${{ inputs.publish_run || github.run_id }}
+          github-token: ${{ github.token }}
       - name: 汇总并发布全部机型
         env:
           GH_TOKEN: ${{ github.token }}
           UPSTREAM_TIME: ${{ needs.plan.outputs.upstream_time }}
+          SOURCE_RUN: ${{ inputs.publish_run || github.run_id }}
+          EXPECTED_MATRIX: ${{ needs.plan.outputs.matrix }}
+          PIN: ${{ inputs.pin_commit }}
         run: |
           python3 tools/prepare-release.py published release "$UPSTREAM_TIME"
+          python3 -c 'import json,os; c=json.load(open("release/version.json")); e=json.loads(os.environ["EXPECTED_MATRIX"])["include"]; assert c["commit"] == os.environ["PIN"]; assert {(d["soc"],d["device"]) for d in e} == {(d["target"],d["device"]) for d in c["devices"].values()}'
+          SOURCE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq .head_sha)
           cd release
           sha256sum -c sha256sums
           TAG=$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')
           TITLE=$(python3 -c 'import json; print("PonWrt " + json.load(open("version.json"))["display_version"] + " (UTC+8)")')
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TITLE" --notes "全部机型升级固件。上游 $UPSTREAM_TIME，构建 $GITHUB_RUN_ID。"
+            gh release create "$TAG" --draft --target "$SOURCE_SHA" --title "$TITLE" --notes "全部机型升级固件。上游 $UPSTREAM_TIME，构建 $SOURCE_RUN。"
           fi
           gh release upload "$TAG" ./* --clobber
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > ../remote-release.json
+          RELEASE_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$TAG\") | .id")
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > ../remote-release.json
           cd ..
           python3 tools/verify-release-assets.py release remote-release.json
           gh release edit "$TAG" --draft=false --latest=true
