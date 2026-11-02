@@ -22,7 +22,7 @@ chmod +x "$WORK_DIR/source/files/etc/uci-defaults/"*
 VERSION="$WORK_DIR/source/files/etc/ponwrt-version"
 printf 'commit=%s\ndevice=%s\ntarget=%s\nbuilt=%s\n' \
     "$PONWRT_PIN" "$PONWRT_DEVICE" "$PONWRT_SOC" "$(date -u +%Y%m%d-%H%M%S)" > "$VERSION"
-PACKAGES="$(tr '\n' ' ' < "$BASE_DIR/packages.txt")"
+PACKAGES="$(python3 "$REPO_DIR/tools/imagebuilder-packages.py" "$WORK_DIR/ib" "$BASE_DIR/packages.txt" "$REPO_DIR/public-packages.txt")"
 make -C "$WORK_DIR/ib" image PROFILE="$PONWRT_DEVICE" PACKAGES="$PACKAGES" \
     FILES="$WORK_DIR/source/files" BIN_DIR="$WORK_DIR/source/bin/targets/airoha/$PONWRT_SOC" \
     CONFIG_TARGET_ROOTFS_INITRAMFS= ROOTFS_FILESYSTEM=squashfs ADD_LOCAL_KEY=1
