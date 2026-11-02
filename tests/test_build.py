@@ -51,6 +51,12 @@ class SambaPatchTests(unittest.TestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_lucky_duplicates_disabled_even_when_upstream_enables_them(self):
+        config = f"CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_{DEVICE}=y\nCONFIG_PACKAGE_luci-app-ddns=y\nCONFIG_PACKAGE_frpc=y\n"
+        result = prepare(config, "an7581", DEVICE, [])
+        self.assertIn("CONFIG_PACKAGE_luci-app-ddns=n", result)
+        self.assertIn("CONFIG_PACKAGE_frpc=n", result)
+
     def test_only_requested_device_and_required_package(self):
         base = "\n".join([
             f"CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_{DEVICE}=y",
@@ -83,6 +89,13 @@ class ConfigurationTests(unittest.TestCase):
 
 
 class ArtifactTests(unittest.TestCase):
+    def test_duplicate_services_block_publication(self):
+        path = self.binary / f"{PREFIX}.manifest"
+        path.write_text(path.read_text() + "\nfrpc - 1\n")
+        with self.assertRaisesRegex(ValueError, "Excluded packages"):
+            self.build()
+        self.assertFalse(self.out.exists())
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)

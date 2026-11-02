@@ -57,7 +57,7 @@ PACKAGES="$(python3 "$REPO_DIR/tools/imagebuilder-packages.py" "$WORK_DIR/ib" "$
 make -C "$WORK_DIR/ib" image PROFILE="$PONWRT_DEVICE" PACKAGES="$PACKAGES" \
     FILES="$WORK_DIR/source/files" BIN_DIR="$WORK_DIR/source/bin/targets/airoha/$PONWRT_SOC" \
     CONFIG_TARGET_ROOTFS_INITRAMFS= ROOTFS_FILESYSTEM=squashfs ADD_LOCAL_KEY=1 \
-    DISABLED_SERVICES="tailscale samba4 ddns"
+    DISABLED_SERVICES="tailscale samba4"
 python3 "$REPO_DIR/tools/collect-artifacts.py" imagebuilder "$WORK_DIR/source" "$OUT_DIR" "$PONWRT_SOC" "$PONWRT_DEVICE"
 manifest=("$OUT_DIR"/*.manifest)
 while IFS= read -r pkg || [[ -n "$pkg" ]]; do

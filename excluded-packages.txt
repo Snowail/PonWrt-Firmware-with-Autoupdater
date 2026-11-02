@@ -1,0 +1,14 @@
+luci-app-ddns*
+luci-i18n-ddns-*
+ddns-scripts*
+ddns-go
+luci-app-frpc
+luci-i18n-frpc-*
+frpc
+luci-app-frps
+luci-i18n-frps-*
+frps
+luci-app-wol
+luci-i18n-wol-*
+etherwake
+wakeonlan

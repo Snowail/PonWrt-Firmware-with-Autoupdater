@@ -31,14 +31,14 @@
 |---|---|
 | 界面、升级 | `luci-theme-aurora`、LuCI 简体中文、`luci-compat`、`luci-app-ponwrt-update`、`curl`、`jsonfilter`、`ca-bundle` |
 | DNS | `adguardhome`、`luci-app-adguardhome` |
-| 分流与公网服务 | `lucky`、`luci-app-lucky`、`frpc`、`luci-app-frpc` |
-| 域名、唤醒与 NAT | `luci-app-ddns`、`ddns-scripts`、`ddns-scripts-services`、`luci-app-wol`、`luci-app-upnp`、`miniupnpd-nftables` |
+| DDNS、FRP、网络唤醒与公网服务 | `lucky`、`luci-app-lucky` |
+| UPnP | `luci-app-upnp`、`miniupnpd-nftables` |
 | 远程组网 | `zerotier`、`luci-app-zerotier`、`tailscale`、`luci-app-tailscale-community`、`wireguard-tools`、`kmod-wireguard`、`luci-proto-wireguard` |
 | 带宽与监控 | `nlbwmon`、`luci-app-nlbwmon`（按终端统计流量） |
 | 文件与共享 | `openssh-sftp-server`、`samba4-server`、`luci-app-samba4` |
 | 诊断 | `iperf3`、`bind-dig`、`ethtool-full`、`htop` |
 
-全新安装默认关闭 AdGuard Home、Lucky、UPnP、Tailscale、Samba 和 DDNS。由用户在 LuCI 中选择是否启用。保留配置升级时沿用已保存的服务设置。完整固件的实际依赖与版本见该次 Release 附带的 `.manifest`。
+全新安装默认关闭 AdGuard Home、Lucky、UPnP、Tailscale 和 Samba。由用户在 LuCI 中选择是否启用。保留配置升级时沿用已保存的服务设置。完整固件的实际依赖与版本见该次 Release 附带的 `.manifest`。
 
 > 科学上网因性能不佳暂时未加入
 

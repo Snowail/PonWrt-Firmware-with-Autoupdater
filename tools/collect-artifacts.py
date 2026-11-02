@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail closed: only publish exact device images with verified hashes and packages."""
 import hashlib
+import fnmatch
 import json
 import os
 import re
@@ -67,6 +68,10 @@ def collect(mode, source, output, soc, device):
         if not manifest.is_file():
             raise ValueError(f"Missing package manifest: {manifest.name}")
         packages = {line.split()[0] for line in manifest.read_text().splitlines() if line.strip()}
+        excluded = (Path(__file__).resolve().parents[1] / "excluded-packages.txt").read_text().split()
+        forbidden = {name for name in packages if any(fnmatch.fnmatchcase(name, pattern) for pattern in excluded)}
+        if forbidden:
+            raise ValueError(f"Excluded packages present: {sorted(forbidden)}")
         required = {"luci-app-ponwrt-update", "curl", "jsonfilter", "ca-bundle", "luci-mod-system"}
         if required - packages:
             raise ValueError(f"Missing image packages: {sorted(required - packages)}")

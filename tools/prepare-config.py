@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Keep upstream package choices, but build exactly one device."""
 import argparse
+import fnmatch
 import re
 from pathlib import Path
 
@@ -10,6 +11,11 @@ def prepare(text, soc, device, extras):
     if device != "all" and f"{symbol}=y" not in text.splitlines():
         raise ValueError(f"Device not enabled in upstream configs/{soc}.config: {device}")
     overrides = dict(line.split("=", 1) for line in extras)
+    excluded = (Path(__file__).resolve().parents[1] / "excluded-packages.txt").read_text().split()
+    for key in re.findall(r"(?:^|\n)(?:# )?(CONFIG_PACKAGE_[^ =]+)", text):
+        name = key.removeprefix("CONFIG_PACKAGE_")
+        if any(fnmatch.fnmatchcase(name, pattern) for pattern in excluded):
+            overrides[key] = "n"
     overrides.update({"CONFIG_CCACHE": "y", "CONFIG_DEVEL": "y"})
     if device == "all":
         overrides.update({"CONFIG_IB": "y", "CONFIG_IB_STANDALONE": "y"})
