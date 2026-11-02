@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: 比较上游默认分支并按需触发完整构建
+      - name: 比较 PonWrt 默认分支并按需构建发布
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -34,11 +34,10 @@ jobs:
             echo "上游与当前正式版一致：$pin" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          targets=all
           runs=$(gh api --paginate "repos/$GH_REPO/actions/workflows/build.yml/runs?branch=main&event=workflow_dispatch&per_page=100" \
             --jq '.workflow_runs[] | [.display_title, .status] | @tsv')
-          if awk -F '\t' -v title="Firmware $targets @ $pin" '$1 == title {found=1} END {exit !found}' <<< "$runs"; then
-            echo "上游提交已有完整构建记录：$pin。失败的运行可手动重试。" >> "$GITHUB_STEP_SUMMARY"
+          if awk -F '\t' -v title="Release all @ $pin" '$1 == title {found=1} END {exit !found}' <<< "$runs"; then
+            echo "上游提交已有发布构建记录：$pin。失败的运行可重跑失败任务或使用发布补跑入口。" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           if awk -F '\t' '$2 != "completed" {busy=1} END {exit !busy}' <<< "$runs"; then
@@ -46,5 +45,5 @@ jobs:
             exit 0
           fi
           gh workflow run build.yml --ref main -f pin_commit="$pin" \
-            -f jobs=4 -f make_release=false
-          echo "已触发 上游启用的全部机型的并行 Artifact 构建：$pin" >> "$GITHUB_STEP_SUMMARY"
+            -f jobs=4 -f make_release=true
+          echo "已触发 PonWrt 新提交 $pin 的全机型构建，校验通过后自动发布统一 Release。" >> "$GITHUB_STEP_SUMMARY"
