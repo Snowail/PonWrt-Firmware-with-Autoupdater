@@ -379,8 +379,12 @@ jobs:
           sha256sum -c sha256sums
           TAG=$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')
           TITLE=$(python3 -c 'import json; print("PonWrt " + json.load(open("version.json"))["display_version"] + " (UTC+8)")')
+          printf '全部机型升级固件。\n\n上游提交 [%s](https://github.com/pbs05/ponwrt/commit/%s)\n\n上游提交时间 %s\n\n构建记录 [#%s](https://github.com/%s/actions/runs/%s)\n' \
+            "$PIN" "$PIN" "$UPSTREAM_TIME" "$SOURCE_RUN" "$GITHUB_REPOSITORY" "$SOURCE_RUN" > ../release-notes.md
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --draft --target "$SOURCE_SHA" --title "$TITLE" --notes "全部机型升级固件。上游 $UPSTREAM_TIME，构建 $SOURCE_RUN。"
+            gh release create "$TAG" --draft --target "$SOURCE_SHA" --title "$TITLE" --notes-file ../release-notes.md
+          else
+            gh release edit "$TAG" --notes-file ../release-notes.md
           fi
           gh release upload "$TAG" ./* --clobber
           RELEASE_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$TAG\") | .id")
