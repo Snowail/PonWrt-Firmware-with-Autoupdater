@@ -27,6 +27,8 @@ endef
 define Package/luci-app-ponwrt-update/install
 	$(INSTALL_DIR) $(1)/usr/bin $(1)/usr/share/rpcd/acl.d
 	$(INSTALL_DIR) $(1)/etc/uci-defaults $(1)/www/luci-static/resources/ponwrt
+	$(INSTALL_DIR) $(1)/lib/upgrade/keep.d
+	$(INSTALL_DATA) ./root/lib/upgrade/keep.d/ponwrt-update $(1)/lib/upgrade/keep.d/
 	$(INSTALL_CONF) ./root/etc/ponwrt-update.interval $(1)/etc/
 	$(INSTALL_BIN) ./root/etc/uci-defaults/92-ponwrt-update-schedule $(1)/etc/uci-defaults/
 	$(INSTALL_DATA) ./root/www/luci-static/resources/ponwrt/notice.js $(1)/www/luci-static/resources/ponwrt/

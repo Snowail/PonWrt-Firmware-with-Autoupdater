@@ -58,6 +58,10 @@ make -C "$WORK_DIR/ib" image PROFILE="$PONWRT_DEVICE" PACKAGES="$PACKAGES" \
     FILES="$WORK_DIR/source/files" BIN_DIR="$WORK_DIR/source/bin/targets/airoha/$PONWRT_SOC" \
     CONFIG_TARGET_ROOTFS_INITRAMFS= ROOTFS_FILESYSTEM=squashfs ADD_LOCAL_KEY=1 \
     DISABLED_SERVICES="tailscale samba4"
+# Check the assembled rootfs too, including builds that reuse an older base.
+mapfile -t keep_rules < <(find "$WORK_DIR/ib/build_dir" -path '*/root-*/lib/upgrade/keep.d/ponwrt-update' -type f)
+[[ ${#keep_rules[@]} == 1 ]] || { echo 'Missing or ambiguous updater backup rules in rootfs'; exit 1; }
+cmp "$REPO_DIR/overlay/lib/upgrade/keep.d/ponwrt-update" "${keep_rules[0]}"
 python3 "$REPO_DIR/tools/collect-artifacts.py" imagebuilder "$WORK_DIR/source" "$OUT_DIR" "$PONWRT_SOC" "$PONWRT_DEVICE"
 manifest=("$OUT_DIR"/*.manifest)
 while IFS= read -r pkg || [[ -n "$pkg" ]]; do

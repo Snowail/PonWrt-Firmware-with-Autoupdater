@@ -7,13 +7,15 @@ const source = readFileSync(process.argv[2], 'utf8');
 async function test(metadata, expected) {
 	const rows = new Map();
 	const buttons = new Map();
-	let interval, saved, poll;
+	let interval, saved, poll, proxyInput, savedProxy, notification;
+	let failSave = false, modalClosed = false;
 	function E(tag, attrs, children) {
 		const element = { isConnected: true, textContent: typeof children === 'string' ? children : '', ...attrs };
 		if (tag === 'td') element.content = children;
 		if (tag === 'tr') rows.set(children[0].content, children[1].content);
 		if (tag === 'button') buttons.set(children[0], element);
 		if (tag === 'select') interval = element;
+		if (tag === 'input') proxyInput = element;
 		return element;
 	}
 	const section = { option: () => ({ subsection: section }) };
@@ -36,6 +38,11 @@ async function test(metadata, expected) {
 			return metadata;
 		},
 		write: async (path, value) => {
+			if (path === '/etc/ponwrt-update.proxy') {
+				if (failSave) throw new Error('Permission denied');
+				savedProxy = value;
+				return;
+			}
 			assert.equal(path, '/etc/ponwrt-update.interval');
 			saved = value;
 		},
@@ -50,8 +57,13 @@ async function test(metadata, expected) {
 		}
 	};
 	const L = { hasViewPermission: () => true, resolveDefault: p => p, bind: fn => fn };
-	const view = new Function('view', 'rpc', 'fs', 'form', 'L', 'E', '_', 'setTimeout', 'clearTimeout', source)(
-		{ extend: v => v }, { declare: () => () => {} }, fs, { JSONMap }, L, E, s => s, (fn, delay) => { poll = { fn, delay }; return 1; }, () => {});
+	const ui = {
+		showModal() { modalClosed = false; },
+		hideModal() { modalClosed = true; },
+		addNotification(title, body) { notification = body.textContent; }
+	};
+	const view = new Function('view', 'rpc', 'fs', 'form', 'L', 'E', '_', 'setTimeout', 'clearTimeout', 'ui', source)(
+		{ extend: v => v }, { declare: () => () => {} }, fs, { JSONMap }, L, E, s => s, (fn, delay) => { poll = { fn, delay }; return 1; }, () => {}, ui);
 	await view.render(await view.load());
 	await new Promise(resolve => setImmediate(resolve));
 	const value = key => rows.get(key).textContent;
@@ -90,6 +102,25 @@ async function test(metadata, expected) {
 	assert.equal(value('最新版本'), 'v2');
 	assert.equal(value('状态'), '发现新版本');
 	assert.equal(value('当前版本'), local);
+	await buttons.get('设置代理').click();
+	proxyInput.value = ' http://10.0.0.5:7897 ';
+	await buttons.get('保存').click();
+	assert.equal(savedProxy, 'http://10.0.0.5:7897\n');
+	assert.equal(value('GitHub 代理'), 'http://10.0.0.5:7897');
+	assert.equal(modalClosed, true);
+	await buttons.get('设置代理').click();
+	assert.equal(proxyInput.value, 'http://10.0.0.5:7897');
+	proxyInput.value = 'http://10.0.0.6:7897';
+	failSave = true;
+	await buttons.get('保存').click();
+	assert.match(notification, /保存代理失败.*Permission denied/);
+	assert.equal(modalClosed, false);
+	assert.equal(value('GitHub 代理'), 'http://10.0.0.5:7897');
+	failSave = false;
+	proxyInput.value = '';
+	await buttons.get('保存').click();
+	assert.equal(savedProxy, '\n');
+	assert.equal(value('GitHub 代理'), '直连');
 }
 Promise.all([
 	test('device=nokia_xg-040g-md-ubi\ntarget=an7581\nbuilt=20261031-184422\n', /^检查后显示版本信息$/),

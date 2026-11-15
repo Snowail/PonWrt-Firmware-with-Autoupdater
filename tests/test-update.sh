@@ -57,8 +57,10 @@ export -f sleep
 sysupgrade() { printf '%s\n' "$*" >> "$TMP_TEST/flash-calls"; return 0; }
 export -f curl jsonfilter sysupgrade
 mkdir "$TMP_TEST/job"
+echo stale-release > "$TMP_TEST/job/desired"
 bash "$TMP_TEST/update.sh" --worker > "$TMP_TEST/output"
 [[ $(cat "$TMP_TEST/job/phase") == ready && "$(wc -l < "$TMP_TEST/flash-calls")" == 1 ]]
+[[ $(cat "$TMP_TEST/job/desired") == test ]]
 grep -q '^-T ' "$TMP_TEST/flash-calls"
 TEST_SCHEMA=2 bash "$TMP_TEST/update.sh" --worker > "$TMP_TEST/output"
 [[ $(cat "$TMP_TEST/job/phase") == ready ]]

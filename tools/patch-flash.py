@@ -112,8 +112,15 @@ m.render = function () {
 				E('button', { 'class': 'btn', 'click': ui.hideModal }, [ '取消' ]),
 				' ',
 				E('button', { 'class': 'btn cbi-button-action important', 'click': function () {
-					return fs.write('/etc/ponwrt-update.proxy', inp.value.trim() + '\n')
-						.then(function () { ui.hideModal(); window.location.reload(); });
+					var value = inp.value.trim();
+					return fs.write('/etc/ponwrt-update.proxy', value + '\n')
+						.then(function () {
+							proxy = value;
+							proxyCell.textContent = proxy || '直连';
+							ui.hideModal();
+						}).catch(function (err) {
+							ui.addNotification(null, E('p', {}, '保存代理失败：' + err.message), 'error');
+						});
 				} }, [ '保存' ])
 			])
 		]);

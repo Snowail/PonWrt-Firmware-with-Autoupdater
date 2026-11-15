@@ -174,6 +174,8 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_*.py' -v
           bash tests/test-build-lib.sh
           bash tests/test-update.sh
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/pbs05/ponwrt/$PONWRT_PIN/package/base-files/files/sbin/sysupgrade" -o /tmp/ponwrt-sysupgrade
+          bash tests/test-upgrade-backup.sh /tmp/ponwrt-sysupgrade
           node tests/test-notice.js
 
       - name: 释放磁盘空间

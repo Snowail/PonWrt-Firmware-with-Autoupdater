@@ -267,7 +267,8 @@ case "${1:-}" in
         [ -z "$err" ] || fail_job "$err"
         [ "$update" = 1 ] || fail_job '没有可用的新版本'
         echo "$latest" > "$JOB/version"
-        [ -s "$JOB/desired" ] || echo "$latest" > "$JOB/desired"
+        # Manual downloads may discover a newer release than the scheduled cache.
+        echo "$latest" > "$JOB/desired"
         printf '%s  image.itb\n' "$lsha" > "$JOB/checksum"
         download_image
         ;;

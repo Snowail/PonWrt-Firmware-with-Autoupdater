@@ -5,3 +5,4 @@
 Makefile text eol=lf
 overlay/usr/bin/* text eol=lf
 overlay/etc/** text eol=lf
+overlay/lib/** text eol=lf
